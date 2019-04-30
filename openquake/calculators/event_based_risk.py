@@ -45,8 +45,8 @@ def build_loss_tables(dstore):
     R = dstore['csm_info'].get_num_rlzs()
     serials = dstore['ruptures']['serial']
     idx_by_ser = dict(zip(serials, range(len(serials))))
-    tbl = numpy.zeros((len(serials), L), F32)
-    lbr = numpy.zeros((R, L), F32)  # losses by rlz
+    tbl = numpy.zeros((len(serials), L), F64)
+    lbr = numpy.zeros((R, L), F64)  # losses by rlz
     for rec in dstore['losses_by_event'].value:  # call .value for speed
         idx = idx_by_ser[rec['eid'] // TWO32]
         tbl[idx] += rec['loss']
@@ -77,7 +77,7 @@ def event_based_risk(riskinputs, riskmodel, param, monitor):
         A = len(ri.aids)
         R = ri.hazard_getter.num_rlzs
         try:
-            avg = numpy.zeros((A, R, L), F32)
+            avg = numpy.zeros((A, R, L), F64)
         except MemoryError:
             raise MemoryError(
                 'Building array avg of shape (%d, %d, %d)' % (A, R, L))
@@ -93,7 +93,7 @@ def event_based_risk(riskinputs, riskmodel, param, monitor):
             if len(out.eids) == 0:  # this happens for sites with no events
                 continue
             r = out.rlzi
-            agglosses = numpy.zeros((len(out.eids), L), F32)
+            agglosses = numpy.zeros((len(out.eids), L), F64)
             for l, loss_type in enumerate(riskmodel.loss_types):
                 loss_ratios = out[loss_type]
                 if loss_ratios is None:  # for GMFs below the minimum_intensity
@@ -190,8 +190,8 @@ class EbrCalculator(base.RiskCalculator):
         avg_losses = oq.avg_losses
         if avg_losses:
             self.dset = self.datastore.create_dset(
-                'avg_losses-rlzs', F32, (self.A, self.R, self.L))
-        self.agglosses = numpy.zeros((self.E, self.L), F32)
+                'avg_losses-rlzs', F64, (self.A, self.R, self.L))
+        self.agglosses = numpy.zeros((self.E, self.L), F64)
         if 'builder' in self.param:
             logging.warning(
                 'Building the loss curves and maps for each asset is '
@@ -210,16 +210,16 @@ class EbrCalculator(base.RiskCalculator):
         P = len(builder.return_periods)
         C = len(self.oqparam.conditional_loss_poes)
         L = self.L
-        self.loss_maps_dt = (F32, (C, L))
+        self.loss_maps_dt = (F64, (C, L))
         if oq.individual_curves or R == 1:
-            self.datastore.create_dset('curves-rlzs', F32, (A, R, P, L))
+            self.datastore.create_dset('curves-rlzs', F64, (A, R, P, L))
             self.datastore.set_attrs(
                 'curves-rlzs', return_periods=builder.return_periods)
         if oq.conditional_loss_poes:
             self.datastore.create_dset(
                 'loss_maps-rlzs', self.loss_maps_dt, (A, R), fillvalue=None)
         if R > 1:
-            self.datastore.create_dset('curves-stats', F32, (A, S, P, L))
+            self.datastore.create_dset('curves-stats', F64, (A, S, P, L))
             self.datastore.set_attrs(
                 'curves-stats', return_periods=builder.return_periods,
                 stats=[encode(name) for (name, func) in stats])
@@ -276,7 +276,7 @@ class EbrCalculator(base.RiskCalculator):
         """
         logging.info('Saving event loss table')
         elt_dt = numpy.dtype(
-            [('eid', U64), ('rlzi', U16), ('loss', (F32, (self.L,)))])
+            [('eid', U64), ('rlzi', U16), ('loss', (F64, (self.L,)))])
         with self.monitor('saving event loss table', measuremem=True):
             agglosses = numpy.fromiter(
                 ((eid, rlz, losses)

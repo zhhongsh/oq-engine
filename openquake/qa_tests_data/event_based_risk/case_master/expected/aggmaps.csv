@@ -1,7 +1,7 @@
 clp,kind,loss_type,taxonomy,value
 0.02,mean,business_interruption,tax1,3.08822E+01
 0.02,mean,business_interruption,tax2,2.29617E+01
-0.02,mean,business_interruption,tax3,8.58136E+00
+0.02,mean,business_interruption,tax3,8.58135E+00
 0.02,mean,contents,tax1,1.75712E+02
 0.02,mean,contents,tax2,2.53334E+02
 0.02,mean,contents,tax3,5.48251E+01
@@ -30,7 +30,7 @@ clp,kind,loss_type,taxonomy,value
 0.02,quantile-0.85,structural,tax2,2.01224E+02
 0.1,mean,business_interruption,tax1,3.08822E+01
 0.1,mean,business_interruption,tax2,2.29617E+01
-0.1,mean,business_interruption,tax3,8.58136E+00
+0.1,mean,business_interruption,tax3,8.58135E+00
 0.1,mean,contents,tax1,1.75712E+02
 0.1,mean,contents,tax2,2.53334E+02
 0.1,mean,contents,tax3,5.48251E+01

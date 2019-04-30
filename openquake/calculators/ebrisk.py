@@ -82,12 +82,12 @@ def ebrisk(rupgetter, srcfilter, param, monitor):
     eid2idx = dict(zip(events['eid'], range(e1, e1 + E)))
     tagnames = param['aggregate_by']
     shape = assetcol.tagcol.agg_shape((E, L), tagnames)
-    elt_dt = [('eid', U64), ('rlzi', U16), ('loss', (F32, shape[1:]))]
+    elt_dt = [('eid', U64), ('rlzi', U16), ('loss', (F64, shape[1:]))]
     if param['asset_loss_table']:
-        alt = numpy.zeros((A, E, L), F32)
-    acc = numpy.zeros(shape, F32)  # shape (E, L, T...)
+        alt = numpy.zeros((A, E, L), F64)
+    acc = numpy.zeros(shape, F64)  # shape (E, L, T...)
     if param['avg_losses']:
-        losses_by_A = numpy.zeros((A, L), F32)
+        losses_by_A = numpy.zeros((A, L), F64)
     else:
         losses_by_A = 0
     # NB: IMT-dependent weights are not supported in ebrisk
@@ -129,7 +129,7 @@ def ebrisk(rupgetter, srcfilter, param, monitor):
         elt = numpy.fromiter(
             ((event['eid'], event['rlz'], losses)
              for event, losses in zip(events, acc) if losses.sum()), elt_dt)
-        agg = general.AccumDict(accum=numpy.zeros(shape[1:], F32))  # rlz->agg
+        agg = general.AccumDict(accum=numpy.zeros(shape[1:], F64))  # rlz->agg
         for rec in elt:
             agg[rec['rlzi']] += rec['loss'] * param['ses_ratio']
     res = {'elt': elt, 'agg_losses': agg, 'times': times,
@@ -167,16 +167,16 @@ class EbriskCalculator(event_based.EventBasedCalculator):
         self.param['riskmodel'] = self.riskmodel
         self.L = L = len(self.riskmodel.loss_types)
         A = len(self.assetcol)
-        self.datastore.create_dset('avg_losses', F32, (A, L))
+        self.datastore.create_dset('avg_losses', F64, (A, L))
         if self.oqparam.asset_loss_table:
-            self.datastore.create_dset('asset_loss_table', F32, (A, self.E, L))
+            self.datastore.create_dset('asset_loss_table', F64, (A, self.E, L))
         shp = self.get_shape(L)  # shape L, T...
-        elt_dt = [('eid', U64), ('rlzi', U16), ('loss', (F32, shp))]
+        elt_dt = [('eid', U64), ('rlzi', U16), ('loss', (F64, shp))]
         if 'losses_by_event' not in self.datastore:
             self.datastore.create_dset('losses_by_event', elt_dt)
-        self.zerolosses = numpy.zeros(shp, F32)  # to get the multi-index
+        self.zerolosses = numpy.zeros(shp, F64)  # to get the multi-index
         shp = self.get_shape(self.L, self.R)  # shape L, R, T...
-        self.datastore.create_dset('agg_losses-rlzs', F32, shp)
+        self.datastore.create_dset('agg_losses-rlzs', F64, shp)
 
     def execute(self):
         oq = self.oqparam
@@ -260,23 +260,23 @@ class EbriskCalculator(event_based.EventBasedCalculator):
         C = len(oq.conditional_loss_poes)
         loss_types = ' '.join(self.riskmodel.loss_types)
         shp = self.get_shape(P, self.R, self.L)  # shape P, R, L, T...
-        self.datastore.create_dset('agg_curves-rlzs', F32, shp)
+        self.datastore.create_dset('agg_curves-rlzs', F64, shp)
         self.datastore.set_attrs(
             'agg_curves-rlzs', return_periods=builder.return_periods,
             loss_types=loss_types)
         if oq.conditional_loss_poes:
             shp = self.get_shape(C, self.R, self.L)  # shape C, R, L, T...
-            self.datastore.create_dset('agg_maps-rlzs', F32, shp)
+            self.datastore.create_dset('agg_maps-rlzs', F64, shp)
         if self.R > 1:
             shp = self.get_shape(P, S, self.L)  # shape P, S, L, T...
-            self.datastore.create_dset('agg_curves-stats', F32, shp)
+            self.datastore.create_dset('agg_curves-stats', F64, shp)
             self.datastore.set_attrs(
                 'agg_curves-stats', return_periods=builder.return_periods,
                 stats=[encode(name) for (name, func) in stats],
                 loss_types=loss_types)
             if oq.conditional_loss_poes:
                 shp = self.get_shape(C, S, self.L)  # shape C, S, L, T...
-                self.datastore.create_dset('agg_maps-stats', F32, shp)
+                self.datastore.create_dset('agg_maps-stats', F64, shp)
                 self.datastore.set_attrs(
                     'agg_maps-stats',
                     stats=[encode(name) for (name, func) in stats],
