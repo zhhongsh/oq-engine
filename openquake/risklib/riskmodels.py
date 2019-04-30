@@ -332,7 +332,7 @@ class ProbabilisticEventBased(RiskModel):
         """
         E = len(gmvs)
         A = len(assets)
-        loss_ratios = numpy.zeros((A, E), F32)
+        loss_ratios = numpy.zeros((A, E), F64)
         vf = self.vulnerability_functions[loss_type, self.kind]
         means, covs, idxs = vf.interpolate(gmvs)
         if len(means) == 0:  # all gmvs are below the minimum imls, 0 ratios

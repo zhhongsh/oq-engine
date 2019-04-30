@@ -1,7 +1,7 @@
 annual_frequency_of_exceedence,return_period,loss_type,loss_value,loss_ratio
 3.33333E-02,30,nonstructural,NAN,NAN
 3.33333E-02,30,structural,NAN,NAN
-1.66667E-02,60,nonstructural,6.28273E+00,1.14231E-03
+1.66667E-02,60,nonstructural,6.28273E+00,1.14232E-03
 1.66667E-02,60,structural,2.07797E+02,1.88906E-02
 8.33333E-03,120,nonstructural,1.30839E+02,2.37889E-02
 8.33333E-03,120,structural,6.67982E+02,6.07256E-02

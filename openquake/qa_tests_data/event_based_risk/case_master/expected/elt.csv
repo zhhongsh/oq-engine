@@ -1,6 +1,6 @@
 event_id,loss_type,taxonomy,value
 2250562863104,business_interruption,tax1,1.12380E+02
-2250562863104,business_interruption,tax2,7.03166E+01
+2250562863104,business_interruption,tax2,7.03165E+01
 2250562863104,business_interruption,tax3,3.45735E+01
 2250562863104,contents,tax1,6.42208E+02
 2250562863104,contents,tax2,6.04351E+02
@@ -33,7 +33,7 @@ event_id,loss_type,taxonomy,value
 2250562863106,nonstructural,tax1,3.29771E+02
 2250562863106,nonstructural,tax2,4.40232E+02
 2250562863106,nonstructural,tax3,1.79277E+02
-2250562863106,occupants,tax1,8.54773E-04
+2250562863106,occupants,tax1,8.54772E-04
 2250562863106,occupants,tax2,9.47638E-04
 2250562863106,occupants,tax3,5.25173E-04
 2250562863107,business_interruption,tax1,7.38570E+01
@@ -327,7 +327,7 @@ event_id,loss_type,taxonomy,value
 2254857830418,contents,tax2,3.73442E+02
 2254857830418,contents,tax3,1.08040E+02
 2254857830418,nonstructural,tax1,8.01072E+02
-2254857830418,nonstructural,tax2,5.60163E+02
+2254857830418,nonstructural,tax2,5.60162E+02
 2254857830418,nonstructural,tax3,1.55731E+02
 2254857830418,occupants,tax1,1.90280E-03
 2254857830418,occupants,tax2,1.09988E-03
