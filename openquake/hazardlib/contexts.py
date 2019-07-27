@@ -252,7 +252,7 @@ class ContextMaker(object):
             if 'rrup' in self.REQUIRES_DISTANCES:
                 reqv_rup = numpy.sqrt(reqv**2 + rupture.hypocenter.depth**2)
                 dctx.rrup = reqv_rup
-        if self.minimum_intensity:
+        if sum(self.minimum_intensity.values()):
             G, M = len(self.gsims), len(self.minimum_intensity)
             gmf = numpy.zeros((nsites, G, M))
             for m, im in enumerate(self.minimum_intensity):
