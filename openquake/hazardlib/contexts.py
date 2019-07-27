@@ -259,9 +259,9 @@ class ContextMaker(object):
                 imt = imt_module.from_string(im)
                 minint = self.minimum_intensity[im]
                 for g, gsim in enumerate(self.gsims):
-                    mean, _ = gsim.get_mean_and_stddevs(
-                        sites, rupture, dctx, imt, [])
-                    gmvs = numpy.exp(mean)
+                    mean, [std] = gsim.get_mean_and_stddevs(
+                        sites, rupture, dctx, imt, [const.StdDev.TOTAL])
+                    gmvs = numpy.exp(mean + std)
                     ok = gmvs > minint
                     gmf[ok, g, m] = gmvs[ok]
             mask = gmf.max(axis=(1, 2)) > 0
