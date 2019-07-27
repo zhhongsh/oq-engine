@@ -66,6 +66,10 @@ class FarAwayRupture(Exception):
     """Raised if the rupture is outside the maximum distance for all sites"""
 
 
+class IneffectiveRupture(Exception):
+    """Raised if the rupture GMF is below the min intensity for all sites"""
+
+
 def get_num_distances(gsims):
     """
     :returns: the number of distances required for the given GSIMs
@@ -238,6 +242,7 @@ class ContextMaker(object):
         for param in self.REQUIRES_DISTANCES - set([self.filter_distance]):
             distances = get_distances(rupture, sites, param)
             setattr(dctx, param, distances)
+        self.add_rup_params(rupture)
         reqv_obj = (self.reqv.get(rupture.tectonic_region_type)
                     if self.reqv else None)
         if reqv_obj and isinstance(rupture.surface, PlanarSurface):
@@ -262,13 +267,10 @@ class ContextMaker(object):
             mask = gmf.max(axis=(1, 2)) > 0
             sites = sites.filter(mask)
             if sites is None:
-                raise FarAwayRupture(
-                    '%d: %d km' % (rupture.serial, distances[mask].min()))
+                raise IneffectiveRupture(rupture.serial)
             elif len(sites) < nsites:
                 for param in vars(dctx):
                     setattr(dctx, param, getattr(dctx, param)[mask])
-
-        self.add_rup_params(rupture)
         sctx = SitesContext(self.REQUIRES_SITES_PARAMETERS, sites)
         # NB: returning a SitesContext make sures that the GSIM cannot
         # access site parameters different from the ones declared
@@ -288,7 +290,7 @@ class ContextMaker(object):
             try:
                 with self.ctx_mon:
                     sctx, dctx = self.make_contexts(sites, rup)
-            except FarAwayRupture:
+            except (FarAwayRupture, IneffectiveRupture):
                 continue
             yield rup, sctx, dctx
             if fewsites:  # store rupdata
