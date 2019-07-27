@@ -259,6 +259,7 @@ class ClassicalCalculator(base.HazardCalculator):
             truncation_level=oq.truncation_level, imtls=oq.imtls,
             filter_distance=oq.filter_distance, reqv=oq.get_reqv(),
             pointsource_distance=oq.pointsource_distance,
+            minimum_intensity=dict(zip(oq.imtls, oq.min_iml)),
             max_sites_disagg=oq.max_sites_disagg,
             task_duration=td, maxweight=maxweight)
         logging.info('ruptures_per_task = %(maxweight)d, '

@@ -128,6 +128,7 @@ class ContextMaker(object):
                  monitor=Monitor()):
         param = param or {}
         self.max_sites_disagg = param.get('max_sites_disagg', 10)
+        self.minimum_intensity = param.get('minimum_intensity', {})
         self.trt = trt
         self.gsims = gsims
         self.maximum_distance = maximum_distance or IntegrationDistance({})
@@ -182,7 +183,8 @@ class ContextMaker(object):
             else:
                 raise FarAwayRupture(
                     '%d: %d km' % (rupture.serial, distances.min()))
-        return sites, DistancesContext([(self.filter_distance, distances)])
+        dctx = DistancesContext([(self.filter_distance, distances)])
+        return sites, dctx
 
     def add_rup_params(self, rupture):
         """
@@ -232,6 +234,7 @@ class ContextMaker(object):
             distance parameters) is unknown.
         """
         sites, dctx = self.filter(sites, rupture)
+        nsites = len(sites)
         for param in self.REQUIRES_DISTANCES - set([self.filter_distance]):
             distances = get_distances(rupture, sites, param)
             setattr(dctx, param, distances)
@@ -244,10 +247,31 @@ class ContextMaker(object):
             if 'rrup' in self.REQUIRES_DISTANCES:
                 reqv_rup = numpy.sqrt(reqv**2 + rupture.hypocenter.depth**2)
                 dctx.rrup = reqv_rup
+        if self.minimum_intensity:
+            G, M = len(self.gsims), len(self.minimum_intensity)
+            gmf = numpy.zeros((nsites, G, M))
+            for m, im in enumerate(self.minimum_intensity):
+                imt = imt_module.from_string(im)
+                minint = self.minimum_intensity[im]
+                for g, gsim in enumerate(self.gsims):
+                    mean, _ = gsim.get_mean_and_stddevs(
+                        sites, rupture, dctx, imt, [])
+                    gmvs = numpy.exp(mean)
+                    ok = gmvs > minint
+                    gmf[ok, g, m] = gmvs[ok]
+            mask = gmf.max(axis=(1, 2)) > 0
+            sites = sites.filter(mask)
+            if sites is None:
+                raise FarAwayRupture(
+                    '%d: %d km' % (rupture.serial, distances[mask].min()))
+            elif len(sites) < nsites:
+                for param in vars(dctx):
+                    setattr(dctx, param, getattr(dctx, param)[mask])
+
         self.add_rup_params(rupture)
+        sctx = SitesContext(self.REQUIRES_SITES_PARAMETERS, sites)
         # NB: returning a SitesContext make sures that the GSIM cannot
         # access site parameters different from the ones declared
-        sctx = SitesContext(self.REQUIRES_SITES_PARAMETERS, sites)
         return sctx, dctx
 
     def gen_rup_contexts(self, src, sites):
