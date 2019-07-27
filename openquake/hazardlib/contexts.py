@@ -267,8 +267,10 @@ class ContextMaker(object):
             mask = gmf.max(axis=(1, 2)) > 0
             sites = sites.filter(mask)
             if sites is None:
+                # the effect of the rupture is below minint for all sites
                 raise IneffectiveRupture(rupture.serial)
             elif len(sites) < nsites:
+                # reduce the distances to the relevant sites
                 for param in vars(dctx):
                     setattr(dctx, param, getattr(dctx, param)[mask])
         sctx = SitesContext(self.REQUIRES_SITES_PARAMETERS, sites)
