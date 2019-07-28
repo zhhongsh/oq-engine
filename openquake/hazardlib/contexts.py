@@ -255,13 +255,15 @@ class ContextMaker(object):
         if sum(self.minimum_intensity.values()):
             G, M = len(self.gsims), len(self.minimum_intensity)
             gmf = numpy.zeros((nsites, G, M))
+            mean_std = {}
             for m, im in enumerate(self.minimum_intensity):
                 imt = imt_module.from_string(im)
                 minint = self.minimum_intensity[im]
                 for g, gsim in enumerate(self.gsims):
-                    mean, [std] = gsim.get_mean_and_stddevs(
+                    mean, [stdtot] = gsim.get_mean_and_stddevs(
                         sites, rupture, dctx, imt, [const.StdDev.TOTAL])
-                    gmvs = numpy.exp(mean + std)
+                    mean_std[gsim, imt] = mean, stdtot
+                    gmvs = numpy.exp(mean)
                     ok = gmvs > minint
                     gmf[ok, g, m] = gmvs[ok]
             mask = gmf.max(axis=(1, 2)) > 0
@@ -273,6 +275,10 @@ class ContextMaker(object):
                 # reduce the distances to the relevant sites
                 for param in vars(dctx):
                     setattr(dctx, param, getattr(dctx, param)[mask])
+            rupture.mean_std = {
+                k: (mean[mask], std[mask])
+                for k, (mean, std) in mean_std.items()}
+
         sctx = SitesContext(self.REQUIRES_SITES_PARAMETERS, sites)
         # NB: returning a SitesContext make sures that the GSIM cannot
         # access site parameters different from the ones declared

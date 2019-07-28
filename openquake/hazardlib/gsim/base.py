@@ -326,31 +326,27 @@ class GroundShakingIntensityModel(metaclass=MetaGSIM):
             float number, and if ``imts`` dictionary contain wrong or
             unsupported IMTs (see :attr:`DEFINED_FOR_INTENSITY_MEASURE_TYPES`).
         """
-        if truncation_level is not None and truncation_level < 0:
+        if hasattr(rctx, 'mean_std'):
+            # set by ContextMaker.make_contexts
+            mean, stddev = rctx.mean_std[self, imt]
+        elif truncation_level is not None and truncation_level < 0:
             raise ValueError('truncation level must be zero, positive number '
                              'or None')
-        self._check_imt(imt)
+        else:
+            mean, [stddev] = self.get_mean_and_stddevs(
+                sctx, rctx, dctx, imt, [const.StdDev.TOTAL])
 
+        imls = self.to_distribution_values(imls)
+        mean = mean.reshape(mean.shape + (1, ))
         if truncation_level == 0:
             # zero truncation mode, just compare imls to mean
-            imls = self.to_distribution_values(imls)
-            mean, _ = self.get_mean_and_stddevs(sctx, rctx, dctx, imt, [])
-            mean = mean.reshape(mean.shape + (1, ))
             return imls <= mean
+        stddev = stddev.reshape(stddev.shape + (1, ))
+        values = (imls - mean) / stddev
+        if truncation_level is None:
+            return _norm_sf(values)
         else:
-            # use real normal distribution
-            assert (const.StdDev.TOTAL
-                    in self.DEFINED_FOR_STANDARD_DEVIATION_TYPES)
-            imls = self.to_distribution_values(imls)
-            mean, [stddev] = self.get_mean_and_stddevs(sctx, rctx, dctx, imt,
-                                                       [const.StdDev.TOTAL])
-            mean = mean.reshape(mean.shape + (1, ))
-            stddev = stddev.reshape(stddev.shape + (1, ))
-            values = (imls - mean) / stddev
-            if truncation_level is None:
-                return _norm_sf(values)
-            else:
-                return _truncnorm_sf(truncation_level, values)
+            return _truncnorm_sf(truncation_level, values)
 
     @abc.abstractmethod
     def to_distribution_values(self, values):
