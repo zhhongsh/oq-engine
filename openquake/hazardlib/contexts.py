@@ -254,14 +254,14 @@ class ContextMaker(object):
 
         return sites, dctx
 
-    def set_mean_std(self, rctx, sctx, dctx):
+    def set_mean_std(self, rctx, sctx, dctx, gsims=()):
         """
         Attach the dictionary gsim, imt -> mean_std to the rupture
         """
         mean_std = {}
         for m, im in enumerate(self.imtls):
             imt = imt_module.from_string(im)
-            for g, gsim in enumerate(self.gsims):
+            for g, gsim in enumerate(gsims or self.gsims):
                 mean, [stdtot] = gsim.get_mean_and_stddevs(
                     sctx, rctx, dctx, imt, [const.StdDev.TOTAL])
                 mean_std[gsim, imt] = mean, stdtot

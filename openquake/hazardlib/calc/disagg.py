@@ -26,7 +26,7 @@ import operator
 import numpy
 import scipy.stats
 
-from openquake.hazardlib import pmf, contexts, const
+from openquake.hazardlib import pmf, contexts
 from openquake.baselib import hdf5, performance
 from openquake.baselib.general import pack, groupby, AccumDict
 from openquake.hazardlib.calc import filters
@@ -87,19 +87,18 @@ def _disaggregate(cmaker, sitecol, rupdata, indices, iml2, eps3,
         acc['lons'].append(rctx.lon_[sidx])
         acc['lats'].append(rctx.lat_[sidx])
         acc['dists'].append(dist)
-        cmaker.set_mean_std(rctx, sitecol, dctx)
+        cmaker.set_mean_std(rctx, sitecol, dctx, [gsim])
         with pne_mon:
             for m, imt in enumerate(iml2.imts):
                 for p, poe in enumerate(iml2.poes_disagg):
-                    iml = iml2[m, p]
-                    pne = disaggregate_pne(
-                        gsim, rctx, sitecol, dctx, imt, iml, *eps3)
+                    pne = _disaggregate_pne(
+                        gsim, rctx, sitecol, dctx, imt, iml2[m, p], *eps3)
                     acc[p, m].append(pne)
     return pack(acc, 'mags dists lons lats P M'.split())
 
 
-def disaggregate_pne(gsim, rupture, sctx, dctx, imt, iml, truncnorm,
-                     epsilons, eps_bands):
+def _disaggregate_pne(gsim, rctx, sctx, dctx, imt, iml, truncnorm,
+                      epsilons, eps_bands):
     """
     Disaggregate (separate) PoE of ``iml`` in different contributions
     each coming from ``epsilons`` distribution bins.
@@ -113,11 +112,7 @@ def disaggregate_pne(gsim, rupture, sctx, dctx, imt, iml, truncnorm,
         from different sigma bands in the form of a 2D numpy array of
         probabilities with shape (n_sites, n_epsilons)
     """
-    if hasattr(rupture, 'mean_std'):
-        mean, stddev = rupture.mean_std[gsim, imt]
-    else:  # compute mean and standard deviations
-        mean, [stddev] = gsim.get_mean_and_stddevs(sctx, rupture, dctx, imt,
-                                                   [const.StdDev.TOTAL])
+    mean, stddev = rctx.mean_std[gsim, imt]
 
     # compute iml value with respect to standard (mean=0, std=1)
     # normal distributions
@@ -143,7 +138,7 @@ def disaggregate_pne(gsim, rupture, sctx, dctx, imt, iml, truncnorm,
             [truncnorm.sf(lvl) - eps_bands[bin:].sum()],
             # ... and all bins on the right go unchanged.
             eps_bands[bin:]])
-    return rupture.get_probability_no_exceedance(poes)
+    return rctx.get_probability_no_exceedance(poes)
 
 
 def lon_lat_bins(bb, coord_bin_width):
@@ -345,7 +340,7 @@ def disaggregation(
     for trt, srcs in by_trt.items():
         cmaker = ContextMaker(
             trt, rlzs_by_gsim, source_filter.integration_distance,
-            {'filter_distance': filter_distance})
+            {'filter_distance': filter_distance, 'imtls': {str(imt): iml}})
         contexts.RuptureContext.temporal_occurrence_model = (
             srcs[0].temporal_occurrence_model)
         rdata = contexts.RupData(cmaker).from_srcs(srcs, sitecol)
