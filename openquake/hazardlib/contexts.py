@@ -252,16 +252,20 @@ class ContextMaker(object):
                 reqv_rup = numpy.sqrt(reqv**2 + rupture.hypocenter.depth**2)
                 dctx.rrup = reqv_rup
 
+        return sites, dctx
+
+    def set_mean_std(self, rctx, sctx, dctx):
+        """
+        Attach the dictionary gsim, imt -> mean_std to the rupture
+        """
         mean_std = {}
         for m, im in enumerate(self.imtls):
             imt = imt_module.from_string(im)
             for g, gsim in enumerate(self.gsims):
                 mean, [stdtot] = gsim.get_mean_and_stddevs(
-                    sites, rupture, dctx, imt, [const.StdDev.TOTAL])
+                    sctx, rctx, dctx, imt, [const.StdDev.TOTAL])
                 mean_std[gsim, imt] = mean, stdtot
-        rupture.mean_std = mean_std
-
-        return sites, dctx
+        rctx.mean_std = mean_std
 
     def gen_rup_contexts(self, src, src_sites):
         """
@@ -278,6 +282,7 @@ class ContextMaker(object):
             try:
                 with self.ctx_mon:
                     sctx, dctx = self.make_contexts(sites, rup)
+                    self.set_mean_std(rup, sctx, dctx)
             except (FarAwayRupture, IneffectiveRupture):
                 continue
             yield rup, sctx, dctx

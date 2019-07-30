@@ -87,6 +87,7 @@ def _disaggregate(cmaker, sitecol, rupdata, indices, iml2, eps3,
         acc['lons'].append(rctx.lon_[sidx])
         acc['lats'].append(rctx.lat_[sidx])
         acc['dists'].append(dist)
+        cmaker.set_mean_std(rctx, sitecol, dctx)
         with pne_mon:
             for m, imt in enumerate(iml2.imts):
                 for p, poe in enumerate(iml2.poes_disagg):
