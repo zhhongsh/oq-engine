@@ -120,6 +120,7 @@ class RupData(object):
         closest = rup.surface.get_closest_points(self.sitecol)
         self.data['lon_'].append(F32(closest.lons))
         self.data['lat_'].append(F32(closest.lats))
+        # self.data['gmf_'].append(gmf)
 
 
 class ContextMaker(object):
@@ -132,7 +133,7 @@ class ContextMaker(object):
                  monitor=Monitor()):
         param = param or {}
         self.max_sites_disagg = param.get('max_sites_disagg', 10)
-        self.minimum_intensity = param.get('minimum_intensity', {})
+        self.imtls = param.get('imtls', {})
         self.trt = trt
         self.gsims = gsims
         self.maximum_distance = maximum_distance or IntegrationDistance({})
@@ -238,7 +239,6 @@ class ContextMaker(object):
             distance parameters) is unknown.
         """
         sites, dctx = self.filter(sites, rupture)
-        nsites = len(sites)
         for param in self.REQUIRES_DISTANCES - set([self.filter_distance]):
             distances = get_distances(rupture, sites, param)
             setattr(dctx, param, distances)
@@ -252,32 +252,15 @@ class ContextMaker(object):
             if 'rrup' in self.REQUIRES_DISTANCES:
                 reqv_rup = numpy.sqrt(reqv**2 + rupture.hypocenter.depth**2)
                 dctx.rrup = reqv_rup
-        if sum(self.minimum_intensity.values()):
-            G, M = len(self.gsims), len(self.minimum_intensity)
-            gmf = numpy.zeros((nsites, G, M))
-            mean_std = {}
-            for m, im in enumerate(self.minimum_intensity):
-                imt = imt_module.from_string(im)
-                minint = self.minimum_intensity[im]
-                for g, gsim in enumerate(self.gsims):
-                    mean, [stdtot] = gsim.get_mean_and_stddevs(
-                        sites, rupture, dctx, imt, [const.StdDev.TOTAL])
-                    mean_std[gsim, imt] = mean, stdtot
-                    gmvs = numpy.exp(mean)
-                    ok = gmvs > minint
-                    gmf[ok, g, m] = gmvs[ok]
-            mask = gmf.max(axis=(1, 2)) > 0
-            sites = sites.filter(mask)
-            if sites is None:
-                # the effect of the rupture is below minint for all sites
-                raise IneffectiveRupture(rupture.serial)
-            elif len(sites) < nsites:
-                # reduce the distances to the relevant sites
-                for param in vars(dctx):
-                    setattr(dctx, param, getattr(dctx, param)[mask])
-            rupture.mean_std = {
-                k: (mean[mask], std[mask])
-                for k, (mean, std) in mean_std.items()}
+
+        mean_std = {}
+        for m, im in enumerate(self.imtls):
+            imt = imt_module.from_string(im)
+            for g, gsim in enumerate(self.gsims):
+                mean, [stdtot] = gsim.get_mean_and_stddevs(
+                    sites, rupture, dctx, imt, [const.StdDev.TOTAL])
+                mean_std[gsim, imt] = mean, stdtot
+        rupture.mean_std = mean_std
 
         sctx = SitesContext(self.REQUIRES_SITES_PARAMETERS, sites)
         # NB: returning a SitesContext make sures that the GSIM cannot

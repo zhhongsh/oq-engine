@@ -228,7 +228,6 @@ class DisaggregationCalculator(base.HazardCalculator):
         csm_info = self.datastore['csm_info']
         self.poes_disagg = oq.poes_disagg or (None,)
         self.imts = list(oq.imtls)
-        R = len(self.rlzs_assoc.realizations)
 
         if oq.rlz_index is None:
             try:

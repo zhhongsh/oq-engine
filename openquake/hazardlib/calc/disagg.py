@@ -112,9 +112,11 @@ def disaggregate_pne(gsim, rupture, sctx, dctx, imt, iml, truncnorm,
         from different sigma bands in the form of a 2D numpy array of
         probabilities with shape (n_sites, n_epsilons)
     """
-    # compute mean and standard deviations
-    mean, [stddev] = gsim.get_mean_and_stddevs(sctx, rupture, dctx, imt,
-                                               [const.StdDev.TOTAL])
+    if hasattr(rupture, 'mean_std'):
+        mean, stddev = rupture.mean_std[gsim, imt]
+    else:  # compute mean and standard deviations
+        mean, [stddev] = gsim.get_mean_and_stddevs(sctx, rupture, dctx, imt,
+                                                   [const.StdDev.TOTAL])
 
     # compute iml value with respect to standard (mean=0, std=1)
     # normal distributions
