@@ -377,13 +377,13 @@ class SourceFilter(object):
         :param trt:
            tectonic region type string
         :returns:
-           the numbers of sites within the integration distance from the
-           hypocenter for the given TRT and magnitude
+           the numbers of sites within the integration distance + 10%
+           from the hypocenter for the given TRT and magnitude
         """
         lon, lat, dep = rec['hypo']
         xyz = spherical_to_cartesian(lon, lat, dep).reshape(1, 3)
         dists = cdist(self.sitecol.mesh.xyz, xyz)
-        ok = dists <= self.integration_distance(trt, rec['mag'])
+        ok = dists <= self.integration_distance(trt, rec['mag']) * 1.1
         return ok.sum()
 
     def filter(self, sources):

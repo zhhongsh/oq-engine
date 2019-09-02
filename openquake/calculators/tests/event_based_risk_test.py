@@ -333,9 +333,6 @@ class EventBasedRiskTestCase(CalculatorTestCase):
         fname = gettemp(view('portfolio_losses', self.calc.datastore))
         self.assertEqualFiles(
             'expected/portfolio_losses.txt', fname, delta=1E-5)
-        # check asset_loss_table
-        tot = self.calc.datastore['asset_loss_table'][()].sum()
-        self.assertEqual(tot, 15781655.0)
 
         # this is a case with exposure, site model and region_grid_spacing
         self.run_calc(case_miriam.__file__, 'job2.ini')
