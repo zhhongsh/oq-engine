@@ -263,13 +263,29 @@ class ClassicalCalculator(base.HazardCalculator):
         srcfilter = self.src_filter(self.datastore.tempname)
         for trt, sources in trt_sources:
             gsims = self.csm.info.gsim_lt.get_gsims(trt)
-            if hasattr(sources, 'atomic') and sources.atomic:
-                # do not split atomic groups
-                yield classical, sources, srcfilter, gsims, param
-            else:  # regroup the sources in blocks
+            if oq.calculation_mode == 'preclassical':
                 for block in block_splitter(sources, maxweight, weight):
-                    yield (self.core_task.__func__, block, srcfilter, gsims,
-                           param)
+                    yield preclassical, block, srcfilter, gsims, param
+            else:
+                if hasattr(sources, 'atomic') and sources.atomic:
+                    # do not split atomic groups
+                    yield classical, sources, srcfilter, gsims, param
+                else:  # regroup the sources
+                    psources = []
+                    others = []
+                    for src in sources:
+                        if hasattr(src, 'location'):
+                            psources.append(src)
+                        else:
+                            others.append(src)
+                    # send non-point sources
+                    for block in block_splitter(others, maxweight, weight):
+                        yield (classical_split_filter, block, srcfilter, gsims,
+                               param)
+                    # filter point sources before sending
+                    for block in block_splitter(
+                            srcfilter.filter(psources), maxweight, weight):
+                        yield classical, block, srcfilter, gsims, param
 
     def save_hazard(self, acc, pmap_by_kind):
         """
