@@ -281,11 +281,12 @@ class ClassicalCalculator(base.HazardCalculator):
                     for block in block_splitter(others, maxweight, weight):
                         smap.submit(block, srcfilter, gsims, param,
                                     func=classical_split_filter)
-                    # filter point sources before sending
-                    for block in block_splitter(
-                            srcfilter.filter(psources), maxweight, weight):
-                        smap.submit(block, srcfilter, gsims, param,
-                                    func=classical)
+                    if psources:
+                        logging.info('Prefiltering point sources')
+                        for block in block_splitter(
+                                srcfilter.filter(psources), maxweight, weight):
+                            smap.submit(block, srcfilter, gsims, param,
+                                        func=classical)
 
     def save_hazard(self, acc, pmap_by_kind):
         """
