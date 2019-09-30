@@ -282,7 +282,7 @@ class ClassicalCalculator(base.HazardCalculator):
                         smap.submit(block, srcfilter, gsims, param,
                                     func=classical_split_filter)
                     if psources:
-                        logging.info('Prefiltering point sources')
+                        logging.info('Prefiltering point sources for %s', trt)
                         for block in block_splitter(
                                 srcfilter.filter(psources), maxweight, weight):
                             smap.submit(block, srcfilter, gsims, param,
