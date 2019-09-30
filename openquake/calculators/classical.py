@@ -213,7 +213,7 @@ class ClassicalCalculator(base.HazardCalculator):
             return {}
 
         smap = parallel.Starmap(self.core_task.__func__)
-        smap.task_queue = list(self.gen_task_queue())  # really fast
+        self.submit_all(smap)
         self.datastore.swmr_on()
         smap.h5 = self.datastore.hdf5
         self.calc_times = AccumDict(accum=numpy.zeros(3, F32))
@@ -237,10 +237,7 @@ class ClassicalCalculator(base.HazardCalculator):
         self.calc_times.clear()  # save a bit of memory
         return acc
 
-    def gen_task_queue(self):
-        """
-        Build a task queue to be attached to the Starmap instance
-        """
+    def submit_all(self, smap):
         oq = self.oqparam
         N = len(self.sitecol)
         trt_sources = self.csm.get_trt_sources(optimize_dupl=True)
@@ -265,11 +262,13 @@ class ClassicalCalculator(base.HazardCalculator):
             gsims = self.csm.info.gsim_lt.get_gsims(trt)
             if oq.calculation_mode == 'preclassical':
                 for block in block_splitter(sources, maxweight, weight):
-                    yield preclassical, block, srcfilter, gsims, param
+                    smap.submit(block, srcfilter, gsims, param,
+                                func=preclassical)
             else:
                 if hasattr(sources, 'atomic') and sources.atomic:
                     # do not split atomic groups
-                    yield classical, sources, srcfilter, gsims, param
+                    smap.submit(sources, srcfilter, gsims, param,
+                                func=classical)
                 else:  # regroup the sources
                     psources = []
                     others = []
@@ -280,12 +279,13 @@ class ClassicalCalculator(base.HazardCalculator):
                             others.append(src)
                     # send non-point sources
                     for block in block_splitter(others, maxweight, weight):
-                        yield (classical_split_filter, block, srcfilter, gsims,
-                               param)
+                        smap.submit(block, srcfilter, gsims, param,
+                                    func=classical_split_filter)
                     # filter point sources before sending
                     for block in block_splitter(
                             srcfilter.filter(psources), maxweight, weight):
-                        yield classical, block, srcfilter, gsims, param
+                        smap.submit(block, srcfilter, gsims, param,
+                                    func=classical)
 
     def save_hazard(self, acc, pmap_by_kind):
         """
