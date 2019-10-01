@@ -166,6 +166,7 @@ class ContextMaker(object):
             else:
                 filter_distance = 'rrup'
         self.filter_distance = filter_distance
+        self.collapse_distance = None
         self.imtls = param.get('imtls', {})
         self.imts = [imt_module.from_string(imt) for imt in self.imtls]
         self.reqv = param.get('reqv')
@@ -197,14 +198,20 @@ class ContextMaker(object):
             (filtered sites, distance context)
         """
         distances = get_distances(rupture, sites, self.filter_distance)
-        if self.maximum_distance:
+        if self.collapse_distance is not None:
+            maxdist = self.maximum_distance(
+                rupture.tectonic_region_type, rupture.mag)
+            mask = distances <= min(maxdist, 3 * self.collapse_distance)
+        elif self.maximum_distance:
             mask = distances <= self.maximum_distance(
                 rupture.tectonic_region_type, rupture.mag)
-            if mask.any():
-                sites, distances = sites.filter(mask), distances[mask]
-            else:
-                raise FarAwayRupture(
-                    '%d: %d km' % (rupture.rup_id, distances.min()))
+        else:
+            return sites, DistancesContext([(self.filter_distance, distances)])
+        if mask.any():
+            sites, distances = sites.filter(mask), distances[mask]
+        else:
+            raise FarAwayRupture(
+                '%d: %d km' % (rupture.rup_id, distances.min()))
         return sites, DistancesContext([(self.filter_distance, distances)])
 
     def add_rup_params(self, rupture):
@@ -325,8 +332,10 @@ class ContextMaker(object):
                 max_dist = self.maximum_distance(src.tectonic_region_type, mag)
                 p_radius = src._get_max_rupture_projection_radius(mag)
                 # the collapse distance has been decided heuristically by MS
-                collapse_distance = min(2 * max(p_radius, d_depth), max_dist)
-                close_sites, far_sites = sites.split(loc, collapse_distance)
+                self.collapse_distance = min(
+                    2 * max(p_radius, d_depth), max_dist)
+                close_sites, far_sites = sites.split(
+                    loc, self.collapse_distance)
                 if close_sites is None:  # all is far
                     for rup in src.gen_ruptures(mag, mag_occ_rate, collapse=1):
                         yield rup, far_sites
