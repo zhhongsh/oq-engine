@@ -440,7 +440,7 @@ hazard_uhs-std.csv
         if NOT_DARWIN:  # broken on macOS
             self.assert_curves_ok(['hazard_curve-PGA.csv',
                                    'hazard_curve-SA(1.0).csv'],
-                                  case_30.__file__)
+                                  case_30.__file__, delta=1E-6)
             # check rupdata
             nruptures = []
             for par, rupdata in sorted(self.calc.datastore['rup'].items()):
