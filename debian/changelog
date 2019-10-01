@@ -1,3 +1,8 @@
+  [Michele Simionato]
+  * Added a check for no GMFs in event_based_risk
+  * Avoided transferring the site collection
+  * Storing the sources in TOML format
+
 python3-oq-engine (3.7.0-1~xenial01) xenial; urgency=low
 
   [Michele Simionato]
