@@ -1,3 +1,4 @@
+#,,,,"generated_by='OpenQuake engine 3.8.0-gitaea2631826', start_date='2019-10-01T03:12:01', checksum=3287977777, investigation_time=15.0, risk_investigation_time=None"
 id,taxonomy,lon,lat,structural
 "a6","MC-RLSB-2",-78.16800,15.59329,1.53454E+01
 "a7","MS-SLSB-1",-78.16812,15.59329,1.01697E-01
