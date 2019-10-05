@@ -21,11 +21,12 @@ import time
 import operator
 import collections.abc
 from contextlib import contextmanager
+import h5py
 import numpy
 from scipy.interpolate import interp1d
 
-from openquake.baselib import hdf5
 from openquake.baselib.python3compat import raise_
+from openquake.hazardlib.site import SiteCollection
 from openquake.hazardlib.geo.utils import (
     KM_TO_DEGREES, angular_distance, fix_lon, get_bounding_box)
 
@@ -260,12 +261,14 @@ class SourceFilter(object):
     Filter the sources by using `self.sitecol.within_bbox` which is
     based on numpy.
     """
-    def __init__(self, sitecol, integration_distance, filename=None):
+    def __init__(self, sitecol, integration_distance, filename=None,
+                 slice=slice(None)):
         if sitecol is not None and len(sitecol) < len(sitecol.complete):
             raise ValueError('%s is not complete!' % sitecol)
         elif sitecol is None:
             integration_distance = {}
         self.filename = filename
+        self.slice = slice
         self.integration_distance = (
             IntegrationDistance(integration_distance)
             if isinstance(integration_distance, dict)
@@ -276,11 +279,11 @@ class SourceFilter(object):
     def __getstate__(self):
         if self.filename:
             # in the engine self.filename is the .hdf5 cache file
-            return dict(filename=self.filename,
+            return dict(filename=self.filename, slice=self.slice,
                         integration_distance=self.integration_distance)
         else:
             # when using calc_hazard_curves without an .hdf5 cache file
-            return dict(filename=None, sitecol=self.sitecol,
+            return dict(filename=None, sitecol=self.sitecol, slice=self.slice,
                         integration_distance=self.integration_distance)
 
     @property
@@ -294,8 +297,11 @@ class SourceFilter(object):
             return
         elif not os.path.exists(self.filename):
             raise FileNotFoundError('%s: shared_dir issue?' % self.filename)
-        with hdf5.File(self.filename, 'r') as h5:
-            self.__dict__['sitecol'] = sc = h5.get('sitecol')
+        with h5py.File(self.filename, 'r') as h5:
+            sc = SiteCollection.__new__(SiteCollection)
+            sc.array = h5['sitecol'][self.slice]
+            sc.complete = sc
+            self.__dict__['sitecol'] = sc
         return sc
 
     def get_rectangle(self, src):
