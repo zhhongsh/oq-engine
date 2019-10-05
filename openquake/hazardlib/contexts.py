@@ -286,21 +286,18 @@ class ContextMaker(object):
         nrups, nsites = 0, 0
         L, G = len(self.imtls.array), len(self.gsims)
         poemap = ProbabilityMap(L, G)
-        for rup, sites in self._gen_rup_sites(src, s_sites):
+        for rup, sites, mean_std in self._gen_rup_sites(src, s_sites, G, M):
             try:
                 with self.ctx_mon:
                     r_sites, dctx = self.make_contexts(sites, rup)
             except FarAwayRupture:
                 continue
             with self.gmf_mon:
-                mean_std = numpy.zeros((G, 2, len(r_sites), M))
+                n = len(r_sites)
                 for i, gsim in enumerate(self.gsims):
                     dctx_ = dctx.roundup(gsim.minimum_distance)
-                    # splitting in arrays long at most 1000 sites
-                    # since short arrays are faster to compute
-                    for s, d, slc in _split(r_sites, dctx_, 1000):
-                        mean_std[i, :, slc] = gsim.get_mean_std(
-                            s, rup, d, imts)
+                    mean_std[i, :, :n] = gsim.get_mean_std(
+                        r_sites, rup, dctx_, imts)
             with self.poe_mon:
                 for sid, pne in self._make_pnes(rup, r_sites.sids, mean_std):
                     pcurve = poemap.setdefault(sid, rup_indep)
@@ -317,7 +314,10 @@ class ContextMaker(object):
         poemap.data = rupdata.data
         return poemap
 
-    def _gen_rup_sites(self, src, sites):
+    def _gen_rup_sites(self, src, sites, G, M):
+        # instantiate the mean_std array once per source, to avoid too many
+        # memory allocations
+        mean_std = numpy.zeros((G, 2, len(sites), M))
         # implements the collapse distance feature: the finite site effects
         # are ignored for sites over collapse_distance x rupture_radius
         loc = getattr(src, 'location', None)
@@ -334,18 +334,18 @@ class ContextMaker(object):
                 close_sites, far_sites = sites.split(loc, collapse_distance)
                 if close_sites is None:  # all is far
                     for rup in src.gen_ruptures(mag, mag_occ_rate, collapse=1):
-                        yield rup, far_sites
+                        yield rup, far_sites, mean_std
                 elif far_sites is None:  # all is close
                     for rup in src.gen_ruptures(mag, mag_occ_rate, collapse=0):
-                        yield rup, close_sites
+                        yield rup, close_sites, mean_std
                 else:  # some sites are far, some are close
                     for rup in src.gen_ruptures(mag, mag_occ_rate, collapse=1):
-                        yield rup, far_sites
+                        yield rup, far_sites, mean_std
                     for rup in src.gen_ruptures(mag, mag_occ_rate, collapse=0):
-                        yield rup, close_sites
+                        yield rup, close_sites, mean_std
         else:
             for rup in src.iter_ruptures():
-                yield rup, sites
+                yield rup, sites, mean_std
 
     def get_pmap_by_grp(self, src_sites, src_mutex=False, rup_mutex=False):
         """
@@ -394,18 +394,18 @@ class ContextMaker(object):
     # NB: it is important for this to be fast since it is inside an inner loop
     def _make_pnes(self, rupture, sids, mean_std):
         imtls = self.imtls
-        nsites = len(sids)
-        pne_array = numpy.zeros((nsites, len(imtls.array), len(self.gsims)))
+        n = len(sids)
+        pne_array = numpy.zeros((n, len(imtls.array), len(self.gsims)))
         for i, gsim in enumerate(self.gsims):
             for m, imt in enumerate(imtls):
                 slc = imtls(imt)
                 if hasattr(gsim, 'weight') and gsim.weight[imt] == 0:
                     # set by the engine when parsing the gsim logictree;
                     # when 0 ignore the gsim: see _build_trts_branches
-                    pno = numpy.ones((nsites, slc.stop - slc.start))
+                    pno = numpy.ones((n, slc.stop - slc.start))
                 else:
                     poes = gsim.get_poes(
-                        mean_std[i, :, :, m], imtls[imt], self.trunclevel)
+                        mean_std[i, :, :n, m], imtls[imt], self.trunclevel)
                     pno = rupture.get_probability_no_exceedance(poes)
                 pne_array[:, slc, i] = pno
         return zip(sids, pne_array)
@@ -502,21 +502,6 @@ class DistancesContext(BaseContext):
                 array.flags.writeable = False
             setattr(ctx, dist, array)
         return ctx
-
-
-def _split(r_sites, dctx, n):
-    if len(r_sites) < n:  # do not split
-        yield r_sites, dctx, slice(None)
-        return
-    ntiles = math.ceil(len(r_sites) / n)
-    for tile in range(ntiles):
-        slc = slice(tile * n, (tile + 1) * n)
-        s = SitesContext()
-        for slot in r_sites.array.dtype.names:
-            setattr(s, slot, r_sites.array[slot][slc])
-        d = DistancesContext(
-            (dist, array[slc]) for dist, array in vars(dctx).items())
-        yield s, d, slc
 
 
 # mock of a rupture used in the tests and in the SMTK
