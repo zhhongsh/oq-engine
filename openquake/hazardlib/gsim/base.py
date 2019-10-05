@@ -282,7 +282,7 @@ class GroundShakingIntensityModel(metaclass=MetaGSIM):
         """
         :returns: an array of shape (2, N, M) with means and stddevs
         """
-        N = len(sctx)
+        N = len(sctx.sids)
         M = len(imts)
         arr = numpy.zeros((2, N, M))
         for m, imt in enumerate(imts):

@@ -289,29 +289,29 @@ class ContextMaker(object):
         for rup, sites in self._gen_rup_sites(src, s_sites):
             try:
                 with self.ctx_mon:
-                    sctx, dctx = self.make_contexts(sites, rup)
+                    r_sites, dctx = self.make_contexts(sites, rup)
             except FarAwayRupture:
                 continue
             with self.gmf_mon:
-                mean_std = numpy.zeros((G, 2, len(sctx), M))
+                mean_std = numpy.zeros((G, 2, len(r_sites), M))
                 for i, gsim in enumerate(self.gsims):
                     dctx_ = dctx.roundup(gsim.minimum_distance)
                     # splitting in arrays long at most 1000 sites
                     # since short arrays are faster to compute
-                    for s, d, slc in split(sctx, dctx_, 1000):
+                    for s, d, slc in _split(r_sites, dctx_, 1000):
                         mean_std[i, :, slc] = gsim.get_mean_std(
                             s, rup, d, imts)
             with self.poe_mon:
-                for sid, pne in self._make_pnes(rup, sctx.sids, mean_std):
+                for sid, pne in self._make_pnes(rup, r_sites.sids, mean_std):
                     pcurve = poemap.setdefault(sid, rup_indep)
                     if rup_indep:
                         pcurve.array *= pne
                     else:
                         pcurve.array += (1.-pne) * rup.weight
             nrups += 1
-            nsites += len(sctx)
+            nsites += len(r_sites)
             if fewsites:  # store rupdata
-                rupdata.add(rup, src.id, sctx, dctx)
+                rupdata.add(rup, src.id, r_sites, dctx)
         poemap.nrups = nrups
         poemap.nsites = nsites
         poemap.data = rupdata.data
@@ -504,16 +504,16 @@ class DistancesContext(BaseContext):
         return ctx
 
 
-def split(sites, dctx, n):
-    if len(sites) < n:  # do not split
-        yield sites, dctx, slice(None)
+def _split(r_sites, dctx, n):
+    if len(r_sites) < n:  # do not split
+        yield r_sites, dctx, slice(None)
         return
-    ntiles = math.ceil(len(sites) / n)
+    ntiles = math.ceil(len(r_sites) / n)
     for tile in range(ntiles):
         slc = slice(tile * n, (tile + 1) * n)
         s = SitesContext()
-        for slot in sites.array.dtype.names:
-            setattr(s, slot, sites.array[slot][slc])
+        for slot in r_sites.array.dtype.names:
+            setattr(s, slot, r_sites.array[slot][slc])
         d = DistancesContext(
             (dist, array[slc]) for dist, array in vars(dctx).items())
         yield s, d, slc
