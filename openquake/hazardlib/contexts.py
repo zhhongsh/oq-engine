@@ -348,6 +348,7 @@ class ContextMaker(object):
         it = iter(src_sites)
         while True:
             t0 = time.time()
+            src = None
             try:
                 src, s_sites = next(it)
                 poemap = self.get_pmap(src, s_sites, not rup_mutex)
@@ -355,6 +356,9 @@ class ContextMaker(object):
             except StopIteration:
                 break
             except Exception as err:
+                if src is None:  # do not trap the exception, it is serious
+                    raise
+                # we have the src information; re-raise the exception with it
                 etype, err, tb = sys.exc_info()
                 msg = '%s (source id=%s)' % (str(err), src.source_id)
                 raise etype(msg).with_traceback(tb)

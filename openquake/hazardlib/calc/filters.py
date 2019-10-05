@@ -379,7 +379,7 @@ class SourceFilter(object):
                 continue
             box = self.integration_distance.get_affected_box(src)
             indices = self.sitecol.within_bbox(box)
-            if len(indices):
+            if len(indices) and self.slice == slice(None):
                 src.indices = indices
                 yield src
 
