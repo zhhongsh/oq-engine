@@ -286,8 +286,8 @@ class ContextMaker(object):
         L, G = len(self.imtls.array), len(self.gsims)
         poemap = ProbabilityMap(L, G)
         for rup, sites in self._gen_rup_sites(src, s_sites):
-            if len(sites) > 1000:
-                tiles = sites.split_in_tiles(len(sites) / 1000)
+            if len(sites) > 2000:
+                tiles = sites.split_in_tiles(len(sites) / 2000)
             else:
                 tiles = [sites]
             for tile in tiles:
