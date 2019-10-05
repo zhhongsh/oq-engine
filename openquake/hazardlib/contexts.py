@@ -286,27 +286,32 @@ class ContextMaker(object):
         L, G = len(self.imtls.array), len(self.gsims)
         poemap = ProbabilityMap(L, G)
         for rup, sites in self._gen_rup_sites(src, s_sites):
-            try:
-                with self.ctx_mon:
-                    sctx, dctx = self.make_contexts(sites, rup)
-            except FarAwayRupture:
-                continue
-            with self.gmf_mon:
-                mean_std = numpy.zeros((G, 2, len(sctx), M))
-                for i, gsim in enumerate(self.gsims):
-                    dctx_ = dctx.roundup(gsim.minimum_distance)
-                    mean_std[i] = gsim.get_mean_std(sctx, rup, dctx_, imts)
-            with self.poe_mon:
-                for sid, pne in self._make_pnes(rup, sctx.sids, mean_std):
-                    pcurve = poemap.setdefault(sid, rup_indep)
-                    if rup_indep:
-                        pcurve.array *= pne
-                    else:
-                        pcurve.array += (1.-pne) * rup.weight
-            nrups += 1
-            nsites += len(sctx)
-            if fewsites:  # store rupdata
-                rupdata.add(rup, src.id, sctx, dctx)
+            if len(sites) > 1000:
+                tiles = sites.split_in_tiles(len(sites) / 1000)
+            else:
+                tiles = [sites]
+            for tile in tiles:
+                try:
+                    with self.ctx_mon:
+                        sctx, dctx = self.make_contexts(tile, rup)
+                except FarAwayRupture:
+                    continue
+                with self.gmf_mon:
+                    mean_std = numpy.zeros((G, 2, len(sctx), M))
+                    for i, gsim in enumerate(self.gsims):
+                        dctx_ = dctx.roundup(gsim.minimum_distance)
+                        mean_std[i] = gsim.get_mean_std(sctx, rup, dctx_, imts)
+                with self.poe_mon:
+                    for sid, pne in self._make_pnes(rup, sctx.sids, mean_std):
+                        pcurve = poemap.setdefault(sid, rup_indep)
+                        if rup_indep:
+                            pcurve.array *= pne
+                        else:
+                            pcurve.array += (1.-pne) * rup.weight
+                nrups += 1
+                nsites += len(sctx)
+                if fewsites:  # store rupdata
+                    rupdata.add(rup, src.id, sctx, dctx)
         poemap.nrups = nrups
         poemap.nsites = nsites
         poemap.data = rupdata.data
