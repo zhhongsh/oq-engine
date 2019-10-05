@@ -18,6 +18,7 @@
 import abc
 import sys
 import copy
+import math
 import time
 import numpy
 
@@ -286,32 +287,31 @@ class ContextMaker(object):
         L, G = len(self.imtls.array), len(self.gsims)
         poemap = ProbabilityMap(L, G)
         for rup, sites in self._gen_rup_sites(src, s_sites):
-            if len(sites) > 2000:
-                tiles = sites.split_in_tiles(len(sites) / 2000)
-            else:
-                tiles = [sites]
-            for tile in tiles:
-                try:
-                    with self.ctx_mon:
-                        sctx, dctx = self.make_contexts(tile, rup)
-                except FarAwayRupture:
-                    continue
-                with self.gmf_mon:
-                    mean_std = numpy.zeros((G, 2, len(sctx), M))
-                    for i, gsim in enumerate(self.gsims):
-                        dctx_ = dctx.roundup(gsim.minimum_distance)
-                        mean_std[i] = gsim.get_mean_std(sctx, rup, dctx_, imts)
-                with self.poe_mon:
-                    for sid, pne in self._make_pnes(rup, sctx.sids, mean_std):
-                        pcurve = poemap.setdefault(sid, rup_indep)
-                        if rup_indep:
-                            pcurve.array *= pne
-                        else:
-                            pcurve.array += (1.-pne) * rup.weight
-                nrups += 1
-                nsites += len(sctx)
-                if fewsites:  # store rupdata
-                    rupdata.add(rup, src.id, sctx, dctx)
+            try:
+                with self.ctx_mon:
+                    sctx, dctx = self.make_contexts(sites, rup)
+            except FarAwayRupture:
+                continue
+            with self.gmf_mon:
+                mean_std = numpy.zeros((G, 2, len(sctx), M))
+                for i, gsim in enumerate(self.gsims):
+                    dctx_ = dctx.roundup(gsim.minimum_distance)
+                    # splitting in arrays long at most 1000 sites
+                    # since short arrays are faster to compute
+                    for s, d, slc in split(sctx, dctx_, 1000):
+                        mean_std[i, :, slc] = gsim.get_mean_std(
+                            s, rup, d, imts)
+            with self.poe_mon:
+                for sid, pne in self._make_pnes(rup, sctx.sids, mean_std):
+                    pcurve = poemap.setdefault(sid, rup_indep)
+                    if rup_indep:
+                        pcurve.array *= pne
+                    else:
+                        pcurve.array += (1.-pne) * rup.weight
+            nrups += 1
+            nsites += len(sctx)
+            if fewsites:  # store rupdata
+                rupdata.add(rup, src.id, sctx, dctx)
         poemap.nrups = nrups
         poemap.nsites = nsites
         poemap.data = rupdata.data
@@ -502,6 +502,21 @@ class DistancesContext(BaseContext):
                 array.flags.writeable = False
             setattr(ctx, dist, array)
         return ctx
+
+
+def split(sites, dctx, n):
+    if len(sites) < n:  # do not split
+        yield sites, dctx, slice(None)
+        return
+    ntiles = math.ceil(len(sites) / n)
+    for tile in range(ntiles):
+        slc = slice(tile * n, (tile + 1) * n)
+        s = SitesContext()
+        for slot in sites.array.dtype.names:
+            setattr(s, slot, sites.array[slot][slc])
+        d = DistancesContext(
+            (dist, array[slc]) for dist, array in vars(dctx).items())
+        yield s, d, slc
 
 
 # mock of a rupture used in the tests and in the SMTK
