@@ -286,7 +286,9 @@ class ContextMaker(object):
         nrups, nsites = 0, 0
         L, G = len(self.imtls.array), len(self.gsims)
         poemap = ProbabilityMap(L, G)
-        for rup, sites, mean_std in self._gen_rup_sites(src, s_sites, G, M):
+        # instantiate the mean_std array once, to avoid too many allocations
+        mean_std = numpy.zeros((G, 2, len(s_sites), M))
+        for rup, sites in self._gen_rup_sites(src, s_sites):
             try:
                 with self.ctx_mon:
                     r_sites, dctx = self.make_contexts(sites, rup)
@@ -314,10 +316,7 @@ class ContextMaker(object):
         poemap.data = rupdata.data
         return poemap
 
-    def _gen_rup_sites(self, src, sites, G, M):
-        # instantiate the mean_std array once per source, to avoid too many
-        # memory allocations
-        mean_std = numpy.zeros((G, 2, len(sites), M))
+    def _gen_rup_sites(self, src, sites):
         # implements the collapse distance feature: the finite site effects
         # are ignored for sites over collapse_distance x rupture_radius
         loc = getattr(src, 'location', None)
@@ -334,18 +333,18 @@ class ContextMaker(object):
                 close_sites, far_sites = sites.split(loc, collapse_distance)
                 if close_sites is None:  # all is far
                     for rup in src.gen_ruptures(mag, mag_occ_rate, collapse=1):
-                        yield rup, far_sites, mean_std
+                        yield rup, far_sites
                 elif far_sites is None:  # all is close
                     for rup in src.gen_ruptures(mag, mag_occ_rate, collapse=0):
-                        yield rup, close_sites, mean_std
+                        yield rup, close_sites
                 else:  # some sites are far, some are close
                     for rup in src.gen_ruptures(mag, mag_occ_rate, collapse=1):
-                        yield rup, far_sites, mean_std
+                        yield rup, far_sites
                     for rup in src.gen_ruptures(mag, mag_occ_rate, collapse=0):
-                        yield rup, close_sites, mean_std
+                        yield rup, close_sites
         else:
             for rup in src.iter_ruptures():
-                yield rup, sites, mean_std
+                yield rup, sites
 
     def get_pmap_by_grp(self, src_sites, src_mutex=False, rup_mutex=False):
         """
