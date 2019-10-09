@@ -22,7 +22,7 @@ import functools
 import multiprocessing
 import numpy
 
-from openquake.baselib.general import DictArray
+from openquake.baselib.general import DictArray, AccumDict
 from openquake.hazardlib.imt import from_string
 from openquake.hazardlib import correlation, stats, calc
 from openquake.hazardlib import valid, InvalidFile
@@ -449,8 +449,9 @@ class OqParam(valid.ParamSet):
         Set the attribute risk_imtls.
         """
         # NB: different loss types may have different IMLs for the same IMT
-        # in that case we merge the IMLs
+        # in that case we generate 20 levels per IMT
         imtls = {}
+        levels = AccumDict(accum=set())
         for taxonomy, risk_functions in risk_models.items():
             for (lt, kind), rf in risk_functions.items():
                 if not hasattr(rf, 'imt') or kind.endswith('_retrofitted'):
@@ -460,12 +461,14 @@ class OqParam(valid.ParamSet):
                 from_string(imt)  # make sure it is a valid IMT
                 imls = list(rf.imls)
                 if imt in imtls and imtls[imt] != imls:
-                    logging.debug(
-                        'Different levels for IMT %s: got %s, expected %s',
-                        imt, imls, imtls[imt])
-                    imtls[imt] = sorted(set(imls + imtls[imt]))
+                    levels[imt].update(imls)
                 else:
                     imtls[imt] = imls
+        if levels:
+            for imt, imls in levels.items():
+                m1, m2 = min(imls), max(imls)
+                logging.info('Using %s = logscale(%s, %s, 20)', m1, m2)
+                imtls[imt] = list(valid.logscale(m1, m2, 20))
         self.risk_imtls = imtls
         if self.uniform_hazard_spectra:
             self.check_uniform_hazard_spectra()
