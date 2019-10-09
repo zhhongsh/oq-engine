@@ -467,7 +467,7 @@ class OqParam(valid.ParamSet):
         if levels:
             for imt, imls in levels.items():
                 m1, m2 = min(imls), max(imls)
-                logging.info('Using %s = logscale(%s, %s, 20)', m1, m2)
+                logging.info('Using %s = logscale(%s, %s, 20)', imt, m1, m2)
                 imtls[imt] = list(valid.logscale(m1, m2, 20))
         self.risk_imtls = imtls
         if self.uniform_hazard_spectra:
