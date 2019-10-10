@@ -464,7 +464,7 @@ class OqParam(valid.ParamSet):
         if len(set(num_levels)) > 1:  # number of levels not uniform per IMT
             for imt, imls in levels.items():
                 m1, m2 = min(imls), max(imls)
-                levels[imt] = valid.logscale(m1, m2, 20)
+                levels[imt] = valid.logscale(m1 or 1E-6, m2, 20)
                 logging.info('Using %s = logscale(%s, %s, 20)', imt, m1, m2)
         for imt in levels:
             imtls[imt] = list(levels[imt])
