@@ -459,17 +459,15 @@ class OqParam(valid.ParamSet):
                     continue
                 imt = rf.imt
                 from_string(imt)  # make sure it is a valid IMT
-                imls = list(rf.imls)
-                if imt in imtls and imtls[imt] != imls:
-                    levels[imt].update(imls)
-                else:
-                    imtls[imt] = imls
-        if levels:
+                levels[imt].update(rf.imls)
+        num_levels = [len(levels[imt]) for imt in levels]
+        if len(set(num_levels)) > 1:  # number of levels not uniform per IMT
             for imt, imls in levels.items():
                 m1, m2 = min(imls), max(imls)
+                levels[imt] = valid.logscale(m1, m2, 20)
                 logging.info('Using %s = logscale(%s, %s, 20)', imt, m1, m2)
-                levels[imt] = list(valid.logscale(m1, m2, 20))
-            imtls.update(levels)
+        for imt in levels:
+            imtls[imt] = list(levels[imt])
         self.risk_imtls = imtls
         if self.uniform_hazard_spectra:
             self.check_uniform_hazard_spectra()
