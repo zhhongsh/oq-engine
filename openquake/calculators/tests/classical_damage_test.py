@@ -94,7 +94,7 @@ class ClassicalDamageTestCase(CalculatorTestCase):
         else:
             for fname in fnames:
                 self.assertEqualFiles(
-                    'expected/%s' % strip_calc_id(fname), fname)
+                    'expected/%s' % strip_calc_id(fname), fname, delta=1E-5)
 
     def test_case_1a(self):
         self.check(case_1a)
