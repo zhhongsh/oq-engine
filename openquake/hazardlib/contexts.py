@@ -143,8 +143,8 @@ class RupData(object):
 def _collapse(rups):
     # collapse a list of ruptures into a single rupture
     rup = copy.copy(rups[0])
-    rup.occurrence_rate *= len(rups)
-    return rup
+    rup.occurrence_rate = sum(r.occurrence_rate for r in rups)
+    return [rup]
 
 
 class ContextMaker(object):
