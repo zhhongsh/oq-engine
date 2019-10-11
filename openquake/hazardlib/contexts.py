@@ -317,12 +317,14 @@ class ContextMaker(object):
                         continue
                     sids.extend(r_sites.sids)
                     data.append((r_sites, rup, dctx))
+                    if fewsites:  # store rupdata
+                        rupdata.add(rup, src.id, r_sites, dctx)
             if not sids:
                 continue
             with self.gmf_mon:
                 mean_std = base.get_mean_std(data, imts, self.gsims)
             with self.poe_mon:
-                pairs = self._make_pnes(data, mean_std)
+                pairs = zip(sids, self._make_pnes(data, mean_std))
             with self.pne_mon:
                 if rup_indep:
                     for sid, pne in pairs:
@@ -333,8 +335,6 @@ class ContextMaker(object):
                             1.-pne) * rup.weight
             nrups += len(rups)
             nsites += len(sids)
-            if fewsites:  # store rupdata
-                rupdata.add(rup, src.id, r_sites, dctx)
         poemap.nrups = nrups
         poemap.nsites = nsites
         poemap.maxdist = numpy.mean(dists) if dists else None
@@ -353,11 +353,12 @@ class ContextMaker(object):
                     # when 0 ignore the gsim: see _build_trts_branches
                     poes[:, ll(imt), g] = 0
         n = 0
-        for r_sites, rup, dctx in data:
+        pnes = []
+        for r_sites, rup, _ in data:
             s = len(r_sites)
-            pnes = rup.get_probability_no_exceedance(poes[n:n+s])
-            yield from zip(r_sites.sids, pnes)
+            pnes.append(rup.get_probability_no_exceedance(poes[n:n+s]))
             n += s
+        return numpy.concatenate(pnes)
 
     def _gen_rups_sites(self, src, sites):
         loc = getattr(src, 'location', None)
