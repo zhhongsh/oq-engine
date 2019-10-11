@@ -164,34 +164,17 @@ class PointSource(ParametricSeismicSource):
         and hypocenter depth.
         """
         for mag, mag_occ_rate in self.get_annual_occurrence_rates():
-            yield from self.gen_ruptures(mag, mag_occ_rate, collapse=False)
-
-    def gen_ruptures(self, mag, mag_occ_rate, collapse=False):
-        """
-        Generate one rupture for each combination of magnitude, nodal plane
-        and hypocenter depth.
-
-        :param mag: magnitude
-        :param mag_occ_rate: occurrence rate for the given magnitude
-        :param collapse: if True, collapse the ruptures to one
-        """
-        for np_prob, np in self.nodal_plane_distribution.data:
-            for hc_prob, hc_depth in self.hypocenter_distribution.data:
-                hypocenter = Point(latitude=self.location.latitude,
-                                   longitude=self.location.longitude,
-                                   depth=hc_depth)
-                occurrence_rate = (mag_occ_rate *
-                                   (1 if collapse else np_prob) *
-                                   (1 if collapse else hc_prob))
-                surface = self._get_rupture_surface(mag, np, hypocenter)
-                yield ParametricProbabilisticRupture(
-                    mag, np.rake, self.tectonic_region_type, hypocenter,
-                    surface, occurrence_rate,
-                    self.temporal_occurrence_model)
-                if collapse:
-                    break
-            if collapse:
-                break
+            for np_prob, np in self.nodal_plane_distribution.data:
+                for hc_prob, hc_depth in self.hypocenter_distribution.data:
+                    hypocenter = Point(latitude=self.location.latitude,
+                                       longitude=self.location.longitude,
+                                       depth=hc_depth)
+                    occurrence_rate = mag_occ_rate * np_prob * hc_prob
+                    surface = self._get_rupture_surface(mag, np, hypocenter)
+                    yield ParametricProbabilisticRupture(
+                        mag, np.rake, self.tectonic_region_type, hypocenter,
+                        surface, occurrence_rate,
+                        self.temporal_occurrence_model)
 
     def count_nphc(self):
         """

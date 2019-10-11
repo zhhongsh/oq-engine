@@ -19,6 +19,8 @@ seismic sources.
 """
 import abc
 import math
+import operator
+import itertools
 import numpy
 from openquake.baselib.slots import with_slots
 from openquake.hazardlib.geo import Point
@@ -102,6 +104,14 @@ class BaseSeismicSource(metaclass=abc.ABCMeta):
             Generator of instances of sublclass of :class:
             `~openquake.hazardlib.source.rupture.BaseProbabilisticRupture`.
         """
+
+    def gen_mag_ruptures(self):
+        """
+        :yields: pairs (magnitude, list of ruptures with that magnitude)
+        """
+        for mag, ruptures in itertools.groupby(
+                self.iter_ruptures(), key=operator.attrgetter('mag')):
+            yield mag, list(ruptures)
 
     def sample_ruptures(self, eff_num_ses):
         """
