@@ -77,17 +77,17 @@ def gsim_imt_dt(sorted_gsims, sorted_imts):
 
 def get_mean_std(contexts, imts, gsims):
     """
-    :param contexts: a list of triples [(rctx, sctx, dctx), ...]
+    :param contexts: a list of triples [(sctx, rctx, dctx), ...]
     :param imts: a list of intensity measure types
     :param gsims: a list of GSIMs
     :returns: an array of shape (2, N, M, G) with means and stddevs
     """
-    N = sum(len(sctx) for _, sctx, _ in contexts)
+    N = sum(len(sctx) for sctx, _, _ in contexts)
     M = len(imts)
     G = len(gsims)
     arr = numpy.zeros((2, N, M, G))
     n = 0
-    for rctx, sctx, dctx in contexts:
+    for sctx, rctx, dctx in contexts:
         s = len(sctx)
         for g, gsim in enumerate(gsims):
             d = dctx.roundup(gsim.minimum_distance)

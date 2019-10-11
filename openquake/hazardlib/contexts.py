@@ -316,7 +316,7 @@ class ContextMaker(object):
                     except FarAwayRupture:
                         continue
                     sids.extend(r_sites.sids)
-                    data.append((rup, r_sites, dctx))
+                    data.append((r_sites, rup, dctx))
             if not sids:
                 continue
             with self.gmf_mon:
@@ -352,7 +352,12 @@ class ContextMaker(object):
                     # set by the engine when parsing the gsim logictree;
                     # when 0 ignore the gsim: see _build_trts_branches
                     poes[:, ll(imt), g] = 0
-        return rupture.get_probability_no_exceedance(poes)
+        n = 0
+        for r_sites, rup, dctx in data:
+            s = len(r_sites)
+            pnes = rup.get_probability_no_exceedance(poes[n:n+s])
+            yield from zip(r_sites.sids, pnes)
+            n += s
 
     def _gen_rups_sites(self, src, sites):
         loc = getattr(src, 'location', None)
