@@ -309,8 +309,8 @@ class ContextMaker(object):
                 dists.append(magdist)
             sids = []
             data = []
-            with self.ctx_mon:
-                for rup in rups:
+            for rup in rups:
+                with self.ctx_mon:
                     try:
                         r_sites, dctx = self.make_contexts(sites, rup, magdist)
                     except FarAwayRupture:
