@@ -39,9 +39,9 @@ def scenario_damage(riskinputs, crmodel, param, monitor):
         dictionary of extra parameters
     :returns:
         a dictionary {'d_asset': [(l, r, a, mean-stddev), ...],
-                      'd_event': damage array of shape R, L, E, D,
+                      'd_event': damage array of shape R, L, F, D,
                       'c_asset': [(l, r, a, mean-stddev), ...],
-                      'c_event': damage array of shape R, L, E}
+                      'c_event': damage array of shape R, L, F}
 
     `d_asset` and `d_tag` are related to the damage distributions
     whereas `c_asset` and `c_tag` are the consequence distributions.
@@ -50,16 +50,21 @@ def scenario_damage(riskinputs, crmodel, param, monitor):
     """
     L = len(crmodel.loss_types)
     D = len(crmodel.damage_states)
-    E = param['number_of_ground_motion_fields']
+    F = param['number_of_ground_motion_fields']
     R = riskinputs[0].hazard_getter.num_rlzs
-    result = dict(d_asset=[], d_event=numpy.zeros((E, R, L, D), F64),
-                  c_asset=[], c_event=numpy.zeros((E, R, L), F64))
+    result = dict(d_asset=[], d_event=numpy.zeros((F, R, L, D), F64),
+                  c_asset=[], c_event=numpy.zeros((F, R, L), F64))
+    if param['asset_damage_table']:
+        result['asset_damage_table'] = []
     for ri in riskinputs:
         for out in ri.gen_outputs(crmodel, monitor):
             r = out.rlzi
             for l, loss_type in enumerate(crmodel.loss_types):
                 for asset, fractions in zip(ri.assets, out[loss_type]):
-                    dmg = fractions[:, :D] * asset['number']  # shape (E, D)
+                    dmg = fractions[:, :D] * asset['number']  # shape (F, D)
+                    if param['asset_damage_table']:
+                        result['asset_damage_table'].append(
+                            (asset['ordinal'], r, l, dmg))
                     result['d_event'][:, r, l] += dmg
                     result['d_asset'].append(
                         (l, r, asset['ordinal'], scientific.mean_std(dmg)))
@@ -85,8 +90,9 @@ class ScenarioDamageCalculator(base.RiskCalculator):
         super().pre_execute()
         F = self.oqparam.number_of_ground_motion_fields
         self.param['number_of_ground_motion_fields'] = F
-        self.riskinputs = self.build_riskinputs('gmf')
         self.param['tags'] = list(self.assetcol.tagcol)
+        self.param['asset_damage_table'] = self.oqparam.asset_damage_table
+        self.riskinputs = self.build_riskinputs('gmf')
 
     def post_execute(self, result):
         """
@@ -98,6 +104,7 @@ class ScenarioDamageCalculator(base.RiskCalculator):
             return
         dstates = self.crmodel.damage_states
         ltypes = self.crmodel.loss_types
+        A = len(self.assetcol)
         L = len(ltypes)
         R = len(self.rlzs_assoc.realizations)
         D = len(dstates)
@@ -119,9 +126,17 @@ class ScenarioDamageCalculator(base.RiskCalculator):
             d_event[ds] = result['d_event'][:, :, :, d]
         self.datastore['dmg_by_event'] = d_event
 
+        # asset_damage_table
+        if self.oqparam.asset_damage_table:
+            adt = self.datastore.create_dset(
+                'asset_damage_table', F32, (A, F, R, L, D), 'gzip')
+            for a, r, l, dmg in result['asset_damage_table']:
+                adt[a, :, r, l] = dmg
+
         # consequence distributions
         if result['c_asset']:
-            dtlist = [('event_id', U32), ('rlz_id', U16), ('loss', (F32, (L,)))]
+            dtlist = [('event_id', U32), ('rlz_id', U16),
+                      ('loss', (F32, (L,)))]
             stat_dt = numpy.dtype([('mean', F32), ('stddev', F32)])
             c_asset = numpy.zeros((N, R, L), stat_dt)
             for (l, r, a, stat) in result['c_asset']:
