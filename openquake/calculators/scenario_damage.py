@@ -15,6 +15,8 @@
 #
 # You should have received a copy of the GNU Affero General Public License
 # along with OpenQuake. If not, see <http://www.gnu.org/licenses/>.
+
+import h5py
 import numpy
 from openquake.baselib import hdf5, general
 from openquake.risklib import scientific
@@ -36,16 +38,14 @@ def discrete_damage_state_distribution(fractions, eids, number):
     :returns: the damage state distribution for each event in terms of integers
 
     >>> fractions = numpy.array([[.8, .1, .1], [.7, .2, .1]])  # shape (2, 3)
-    >>> discrete_damage_state_distribution(fractions, 100)
-    array([[80, 10, 10],
-           [70, 20, 10]], dtype=uint32)
+    >>> discrete_damage_state_distribution(fractions, [0, 1], 100)
+    [(0, array([10, 10], dtype=uint16)), (1, array([20, 10], dtype=uint16))]
     """
     ddd = []
     for eid, fracs in zip(eids, fractions):
-        for ds, frac in enumerate(fracs[1:], 1):
-            n = U32(round(frac * number))
-            if n > 0:
-                ddd.append((eid, U8(ds), n))
+        n = U16(numpy.round(fracs[1:] * number))
+        if n.any():
+            ddd.append((eid, n))
     return ddd
 
 
@@ -156,8 +156,10 @@ class ScenarioDamageCalculator(base.RiskCalculator):
 
         # asset_damage_table
         if self.oqparam.asset_damage_table:
+            dt = numpy.dtype([('eid', numpy.uint32), ('ddd', (U16, D - 1))])
+            vddd = h5py.special_dtype(vlen=dt)
             adt = self.datastore.create_dset(
-                'asset_damage_table', hdf5.vddd, (A, L), fillvalue=None)
+                'asset_damage_table', vddd, (A, L), fillvalue=None)
             for al, ddd in result['asset_damage_table'].items():
                 adt[al] = ddd
 

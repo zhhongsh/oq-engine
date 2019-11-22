@@ -40,8 +40,6 @@ vuint16 = h5py.special_dtype(vlen=numpy.uint16)
 vuint32 = h5py.special_dtype(vlen=numpy.uint32)
 vfloat32 = h5py.special_dtype(vlen=numpy.float32)
 vfloat64 = h5py.special_dtype(vlen=numpy.float64)
-vddd = h5py.special_dtype(vlen=numpy.dtype(  # discrete damage distribution
-    [('eid', numpy.uint32), ('ds', numpy.uint8), ('n', numpy.uint16)]))
 
 
 def maybe_encode(value):
