@@ -16,16 +16,20 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with OpenQuake. If not, see <http://www.gnu.org/licenses/>.
 import numpy
+from openquake.baselib import hdf5, general
 from openquake.risklib import scientific
 from openquake.calculators import base
 
+U8 = numpy.uint8
 U16 = numpy.uint16
 U32 = numpy.uint32
 F32 = numpy.float32
 F64 = numpy.float64
 
+edn_dt = numpy.dtype([('eid', U32), ('dsi', U8), ('n', U16)])
 
-def discrete_damage_state_distribution(fractions, number):
+
+def discrete_damage_state_distribution(fractions, eids, number):
     """
     :param fractions: an array of probabilities of shape (F, D)
     :param number: an integer in the range 0 .. 65535
@@ -36,14 +40,12 @@ def discrete_damage_state_distribution(fractions, number):
     array([[80, 10, 10],
            [70, 20, 10]], dtype=uint32)
     """
-    F, D = fractions.shape
-    arr = numpy.zeros((F, D), U32)
-    tot = numpy.zeros(F, U32)
-    for d in range(D - 1):
-        arr[:, d] = numpy.round(fractions[:, d] * number)
-        tot += arr[:, d]
-    arr[:, D - 1] = number - tot  # make sure the damage states sum to number
-    return arr
+    ddd = []
+    for eid, fracs in zip(eids, fractions):
+        for ds, frac in enumerate(fracs[1:], 1):
+            if frac > 0:
+                ddd.append((eid, U8(ds), U32(round(frac * number))))
+    return ddd
 
 
 def scenario_damage(riskinputs, crmodel, param, monitor):
@@ -76,7 +78,7 @@ def scenario_damage(riskinputs, crmodel, param, monitor):
     result = dict(d_asset=[], d_event=numpy.zeros((F, R, L, D), F64),
                   c_asset=[], c_event=numpy.zeros((F, R, L), F64))
     if param['asset_damage_table']:
-        result['asset_damage_table'] = []
+        adl = general.AccumDict(accum=[])  # a, l -> ddd
     for ri in riskinputs:
         for out in ri.gen_outputs(crmodel, monitor):
             r = out.rlzi
@@ -84,10 +86,10 @@ def scenario_damage(riskinputs, crmodel, param, monitor):
                 for asset, fractions in zip(ri.assets, out[loss_type]):
                     dmg = fractions[:, :D] * asset['number']  # shape (F, D)
                     if param['asset_damage_table']:
+                        eids = numpy.arange(r*F, r*F + F, dtype=U32)
                         ddd = discrete_damage_state_distribution(
-                            fractions[:, :D], asset['number'])
-                        result['asset_damage_table'].append(
-                            (asset['ordinal'], r, l, ddd))
+                            fractions[:, :D], eids, asset['number'])
+                        adl[asset['ordinal'], l].extend(ddd)
                     result['d_event'][:, r, l] += dmg
                     result['d_asset'].append(
                         (l, r, asset['ordinal'], scientific.mean_std(dmg)))
@@ -96,6 +98,8 @@ def scenario_damage(riskinputs, crmodel, param, monitor):
                         result['c_asset'].append(
                             (l, r, asset['ordinal'], scientific.mean_std(csq)))
                         result['c_event'][:, r, l] += csq
+    if param['asset_damage_table']:
+        result['asset_damage_table'] = adl
     return result
 
 
@@ -152,9 +156,9 @@ class ScenarioDamageCalculator(base.RiskCalculator):
         # asset_damage_table
         if self.oqparam.asset_damage_table:
             adt = self.datastore.create_dset(
-                'asset_damage_table', U32, (A, F*R, D, L), 'gzip')
-            for a, r, l, ddd in result['asset_damage_table']:
-                adt[a, slice(r*F, r*F + F), :, l] = ddd
+                'asset_damage_table', hdf5.vddd, (A, L), fillvalue=None)
+            for al, ddd in result['asset_damage_table'].items():
+                adt[al] = ddd
 
         # consequence distributions
         if result['c_asset']:
