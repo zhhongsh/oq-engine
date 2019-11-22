@@ -739,7 +739,7 @@ class Exposure(object):
     @staticmethod
     def read(fnames, calculation_mode='', region_constraint='',
              ignore_missing_costs=(), asset_nodes=False, check_dupl=True,
-             tagcol=None, by_country=False):
+             tagcol=None, check_number=False, by_country=False):
         """
         Call `Exposure.read(fname)` to get an :class:`Exposure` instance
         keeping all the assets in memory or
@@ -762,7 +762,7 @@ class Exposure(object):
                 prefix = ''
             allargs.append((fname, calculation_mode, region_constraint,
                             ignore_missing_costs, asset_nodes, check_dupl,
-                            prefix, tagcol))
+                            prefix, tagcol, check_number))
         exp = None
         for exposure in itertools.starmap(Exposure.read_exp, allargs):
             if exp is None:  # first time
@@ -783,10 +783,11 @@ class Exposure(object):
     @staticmethod
     def read_exp(fname, calculation_mode='', region_constraint='',
                  ignore_missing_costs=(), asset_nodes=False, check_dupl=True,
-                 asset_prefix='', tagcol=None, monitor=None):
+                 asset_prefix='', tagcol=None, check_number=0, monitor=None):
         logging.info('Reading %s', fname)
         param = {'calculation_mode': calculation_mode}
         param['asset_prefix'] = asset_prefix
+        param['check_number'] = check_number
         param['out_of_region'] = 0
         if region_constraint:
             param['region'] = wkt.loads(region_constraint)
@@ -806,7 +807,7 @@ class Exposure(object):
             array = exposure._read_csv()
         param['relevant_cost_types'] = set(exposure.cost_types['name']) - set(
             ['occupants'])
-        exposure._populate_from(array, param, check_dupl)
+        exposure._populate_from(array, param, check_dupl, check_number)
         if param['region'] and param['out_of_region']:
             logging.info('Discarded %d assets outside the region',
                          param['out_of_region'])
@@ -875,10 +876,13 @@ class Exposure(object):
             array = hdf5.read_csv(fname, conv, rename).array
             yield from array
 
-    def _populate_from(self, asset_array, param, check_dupl):
+    def _populate_from(self, asset_array, param, check_dupl, check_number):
         asset_refs = set()
         for idx, asset in enumerate(asset_array):
             asset_id = asset['id']
+            if check_number and asset['number'] > 65535:
+                raise ValueError('number="%s" is invalid for asset %s'
+                                 % (asset['number'], asset_id))
             # check_dupl is False only in oq prepare_site_model since
             # in that case we are only interested in the asset locations
             if check_dupl and asset_id in asset_refs:

@@ -25,6 +25,27 @@ F32 = numpy.float32
 F64 = numpy.float64
 
 
+def discrete_damage_state_distribution(fractions, number):
+    """
+    :param fractions: an array of probabilities of shape (F, D)
+    :param number: an integer in the range 0 .. 65535
+    :returns: the damage state distribution for each event in terms of integers
+
+    >>> fractions = numpy.array([[.8, .1, .1], [.7, .2, .1]])  # shape (2, 3)
+    >>> discrete_damage_state_distribution(fractions, 100)
+    array([[80, 10, 10],
+           [70, 20, 10]], dtype=uint32)
+    """
+    F, D = fractions.shape
+    arr = numpy.zeros((F, D), U32)
+    tot = numpy.zeros(F, U32)
+    for d in range(D - 1):
+        arr[:, d] = numpy.round(fractions[:, d] * number)
+        tot += arr[:, d]
+    arr[:, D - 1] = number - tot  # make sure the damage states sum to number
+    return arr
+
+
 def scenario_damage(riskinputs, crmodel, param, monitor):
     """
     Core function for a damage computation.
@@ -63,8 +84,10 @@ def scenario_damage(riskinputs, crmodel, param, monitor):
                 for asset, fractions in zip(ri.assets, out[loss_type]):
                     dmg = fractions[:, :D] * asset['number']  # shape (F, D)
                     if param['asset_damage_table']:
+                        ddd = discrete_damage_state_distribution(
+                            fractions[:, :D], asset['number'])
                         result['asset_damage_table'].append(
-                            (asset['ordinal'], r, l, dmg))
+                            (asset['ordinal'], r, l, ddd))
                     result['d_event'][:, r, l] += dmg
                     result['d_asset'].append(
                         (l, r, asset['ordinal'], scientific.mean_std(dmg)))
@@ -129,9 +152,9 @@ class ScenarioDamageCalculator(base.RiskCalculator):
         # asset_damage_table
         if self.oqparam.asset_damage_table:
             adt = self.datastore.create_dset(
-                'asset_damage_table', F32, (A, F, R, L, D), 'gzip')
-            for a, r, l, dmg in result['asset_damage_table']:
-                adt[a, :, r, l] = dmg
+                'asset_damage_table', U32, (A, F*R, L, D), 'gzip')
+            for a, r, l, ddd in result['asset_damage_table']:
+                adt[a, slice(r*F, r*F + F), l] = ddd
 
         # consequence distributions
         if result['c_asset']:
