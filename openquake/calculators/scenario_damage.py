@@ -43,8 +43,9 @@ def discrete_damage_state_distribution(fractions, eids, number):
     ddd = []
     for eid, fracs in zip(eids, fractions):
         for ds, frac in enumerate(fracs[1:], 1):
-            if frac > 0:
-                ddd.append((eid, U8(ds), U32(round(frac * number))))
+            n = U32(round(frac * number))
+            if n > 0:
+                ddd.append((eid, U8(ds), n))
     return ddd
 
 
