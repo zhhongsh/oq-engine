@@ -1161,6 +1161,21 @@ def extract_rupture_info(dstore, what):
     return ArrayWrapper(arr, dict(investigation_time=oq.investigation_time,
                                   boundaries=geoms))
 
+
+@extract.add('discrete_damage_distribution')
+def extract_ddd(dstore, what):
+    """
+    Extract the discrete damage distribution for an asset.
+    Example:
+    http://127.0.0.1:8800/v1/calc/30/extract/discrete_damage_distribution?asset=0&lti=0
+    """
+    qdict = parse(what)
+    aid = int(qdict['asset'][0])
+    lti = int(qdict['lti'][0])
+    ass = dstore['assetcol/array'][aid]
+    arr = dstore['asset_damage_table'][aid, lti]
+    return ArrayWrapper(arr, {'number': U16(ass['number'])})
+
 # #####################  extraction from the WebAPI ###################### #
 
 

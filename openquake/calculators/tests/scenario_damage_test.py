@@ -102,6 +102,12 @@ RM       4,000
         for fname in fnames:
             self.assertEqualFiles('expected/' + strip_calc_id(fname), fname)
 
+        # discrete damage distribution
+        aw = extract(self.calc.datastore,
+                     'discrete_damage_distribution?asset=4&lti=0')
+        self.assertEqual(len(aw), 32)
+        self.assertEqual(aw.number, 1)
+
     def test_wrong_gsim_lt(self):
         with self.assertRaises(InvalidFile) as ctx:
             self.run_calc(os.path.dirname(case_4b.__file__), 'job_err.ini')

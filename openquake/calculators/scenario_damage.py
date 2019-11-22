@@ -165,7 +165,6 @@ class ScenarioDamageCalculator(base.RiskCalculator):
                 adt[al] = ddd
                 eff_events.append(len(ddd))
             adt.attrs['eff_events'] = numpy.average(eff_events)
-            adt.attrs['number'] = U16(self.assetcol['number'])
 
         # consequence distributions
         if result['c_asset']:
