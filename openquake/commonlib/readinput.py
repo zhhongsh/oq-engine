@@ -650,6 +650,11 @@ def get_exposure(oqparam):
         oqparam.region, oqparam.ignore_missing_costs,
         by_country='country' in oqparam.aggregate_by,
         check_number=oqparam.asset_damage_table)
+    if oqparam.asset_damage_table and (
+            len(exposure.assets) > oqparam.max_assets_damage):
+        raise ValueError(
+            'The exposure is too big for asset_damaga_table=true: %d > %d' %
+            (len(exposure.assets), oqparam.max_assets_damage))
     exposure.mesh, exposure.assets_by_site = exposure.get_mesh_assets_by_site()
     return exposure
 
