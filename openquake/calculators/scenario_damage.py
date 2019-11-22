@@ -152,9 +152,9 @@ class ScenarioDamageCalculator(base.RiskCalculator):
         # asset_damage_table
         if self.oqparam.asset_damage_table:
             adt = self.datastore.create_dset(
-                'asset_damage_table', U32, (A, F*R, L, D), 'gzip')
+                'asset_damage_table', U32, (A, F*R, D, L), 'gzip')
             for a, r, l, ddd in result['asset_damage_table']:
-                adt[a, slice(r*F, r*F + F), l] = ddd
+                adt[a, slice(r*F, r*F + F), :, l] = ddd
 
         # consequence distributions
         if result['c_asset']:
