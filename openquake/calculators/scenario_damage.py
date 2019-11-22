@@ -160,8 +160,12 @@ class ScenarioDamageCalculator(base.RiskCalculator):
             vddd = h5py.special_dtype(vlen=dt)
             adt = self.datastore.create_dset(
                 'asset_damage_table', vddd, (A, L), fillvalue=None)
+            eff_events = []
             for al, ddd in result['asset_damage_table'].items():
                 adt[al] = ddd
+                eff_events.append(len(ddd))
+            adt.attrs['eff_events'] = numpy.average(eff_events)
+            adt.attrs['number'] = U16(self.assetcol['number'])
 
         # consequence distributions
         if result['c_asset']:
