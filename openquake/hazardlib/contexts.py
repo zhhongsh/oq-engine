@@ -353,27 +353,20 @@ class ContextMaker(object):
         return pmap, rdata, calc_times, extra
 
     def _pmap_by_grp_one_site(self, pmaker, pmap):
-        gids = []
         rup_data = AccumDict(accum=[])
         # AccumDict of arrays with 3 elements nrups, nsites, calc_time
         calc_times = AccumDict(accum=numpy.zeros(3, numpy.float32))
         dists = []
         totrups = 0
         t0 = time.time()
-        poemap = pmaker.make1(pmap)
+        poemap = pmaker.make1(pmap, rup_data)
         if poemap.maxdist:
             dists.append(poemap.maxdist)
         totrups += poemap.totrups
-        if len(poemap.data):
-            nr = len(poemap.data['sid_'])
-            gids.extend([pmaker.grp_id] * nr)
-            for k, v in poemap.data.items():
-                rup_data[k].extend(v)
-
         calc_times[pmaker.grp_id] += numpy.array(
             [poemap.numrups, poemap.nsites, time.time() - t0])
         rdata = {k: numpy.array(v) for k, v in rup_data.items()}
-        rdata['grp_id'] = numpy.uint16(gids)
+        rdata['grp_id'] = numpy.uint16(rup_data['grp_id'])
         extra = dict(totrups=totrups,
                      maxdist=numpy.mean(dists) if dists else None)
         return pmap, rdata, calc_times, extra
@@ -492,16 +485,21 @@ class PmapMaker(object):
                     rup_data[k].extend(v)
         return poemap
 
-    def make1(self, pmap):
+    def make1(self, pmap, rup_data):
         """
         :param pmap: ProbabilityMap instance to update
         """
         sitecol = self.srcfilter.sitecol
         assert len(sitecol) == 1, sitecol
         with self.cmaker.mon('iter_ruptures', measuremem=False):
+            srcs = []
             ruptures = []
             for src, _ in self.srcfilter(self.group):
-                ruptures.extend(src.iter_ruptures(shift_hypo=self.shift_hypo))
+                if len(src.src_group_ids) > 1:
+                    srcs.append(src)
+                else:
+                    ruptures.extend(
+                        src.iter_ruptures(shift_hypo=self.shift_hypo))
             ruptures.sort(key=operator.attrgetter('mag'))
             self.mag_rups = [(mag, list(rups))
                              for mag, rups in itertools.groupby(
