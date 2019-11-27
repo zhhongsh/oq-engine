@@ -526,6 +526,9 @@ class PmapMaker(object):
         poemap.maxdist = numpy.mean(dists) if dists else None
         poemap.data = rupdata.data
         pmap[grp_id] |= ~poemap if self.rup_indep else poemap
+        rup_data['grp_id'].extend([grp_id] * numrups)
+        for k, v in rupdata.data.items():
+            rup_data[k].extend(v)
         return poemap
 
     def collapse(self, ctxs, precision=1E-3):
