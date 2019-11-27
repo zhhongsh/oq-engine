@@ -324,47 +324,41 @@ class ContextMaker(object):
         # AccumDict of arrays with 3 elements nrups, nsites, calc_time
         calc_times = AccumDict(accum=numpy.zeros(3, numpy.float32))
         pmaker = PmapMaker(self, srcfilter, group)
-        if len(srcfilter.sitecol) == 1 and not pmaker.src_mutex:
-            return self._pmap_by_grp_one_site(pmaker, pmap)
+        one_site = len(srcfilter.sitecol) == 1 and not pmaker.src_mutex
         dists = []
         totrups = 0
         src_sites = srcfilter(group)
+        multisource = []
         while True:
             t0 = time.time()
             try:
                 src, sites = next(src_sites)
-                poemap = pmaker.make(src, sites, pmap, rup_data)
+                if one_site and len(src.src_group_ids) == 1:
+                    multisource.append(src)
+                    poemap = None
+                else:
+                    poemap = pmaker.make(src, sites, pmap, rup_data)
             except StopIteration:
                 break
             except Exception as err:
                 etype, err, tb = sys.exc_info()
                 msg = '%s (source id=%s)' % (str(err), src.source_id)
                 raise etype(msg).with_traceback(tb)
-            if poemap.maxdist:
-                dists.append(poemap.maxdist)
+            if poemap:
+                if poemap.maxdist:
+                    dists.append(poemap.maxdist)
+                totrups += poemap.totrups
+                calc_times[src.id] += numpy.array(
+                    [poemap.numrups, poemap.nsites, time.time() - t0])
+
+        if multisource:
+            # this is only define for 1 site, no src_mutex and single grp_id
+            poemap = pmaker.make1(multisource, pmap, rup_data)
             totrups += poemap.totrups
-            calc_times[src.id] += numpy.array(
+            [grp_id] = multisource[0].src_group_ids
+            calc_times[grp_id] += numpy.array(
                 [poemap.numrups, poemap.nsites, time.time() - t0])
 
-        rdata = {k: numpy.array(v) for k, v in rup_data.items()}
-        rdata['grp_id'] = numpy.uint16(rup_data['grp_id'])
-        extra = dict(totrups=totrups,
-                     maxdist=numpy.mean(dists) if dists else None)
-        return pmap, rdata, calc_times, extra
-
-    def _pmap_by_grp_one_site(self, pmaker, pmap):
-        rup_data = AccumDict(accum=[])
-        # AccumDict of arrays with 3 elements nrups, nsites, calc_time
-        calc_times = AccumDict(accum=numpy.zeros(3, numpy.float32))
-        dists = []
-        totrups = 0
-        t0 = time.time()
-        poemap = pmaker.make1(pmap, rup_data)
-        if poemap.maxdist:
-            dists.append(poemap.maxdist)
-        totrups += poemap.totrups
-        calc_times[pmaker.grp_id] += numpy.array(
-            [poemap.numrups, poemap.nsites, time.time() - t0])
         rdata = {k: numpy.array(v) for k, v in rup_data.items()}
         rdata['grp_id'] = numpy.uint16(rup_data['grp_id'])
         extra = dict(totrups=totrups,
@@ -485,21 +479,16 @@ class PmapMaker(object):
                     rup_data[k].extend(v)
         return poemap
 
-    def make1(self, pmap, rup_data):
+    def make1(self, multisource, pmap, rup_data):
         """
         :param pmap: ProbabilityMap instance to update
         """
         sitecol = self.srcfilter.sitecol
         assert len(sitecol) == 1, sitecol
         with self.cmaker.mon('iter_ruptures', measuremem=False):
-            srcs = []
             ruptures = []
-            for src, _ in self.srcfilter(self.group):
-                if len(src.src_group_ids) > 1:
-                    srcs.append(src)
-                else:
-                    ruptures.extend(
-                        src.iter_ruptures(shift_hypo=self.shift_hypo))
+            for src in multisource:
+                ruptures.extend(src.iter_ruptures(shift_hypo=self.shift_hypo))
             ruptures.sort(key=operator.attrgetter('mag'))
             self.mag_rups = [(mag, list(rups))
                              for mag, rups in itertools.groupby(
