@@ -106,13 +106,12 @@ class RupData(object):
                 self.add(rup, src.id, sites)
         return {k: numpy.array(v) for k, v in self.data.items()}
 
-    def add(self, rup, src_id, sctx, dctx=None):
+    def add(self, rup, sctx, dctx=None):
         rate = rup.occurrence_rate
         if numpy.isnan(rate):  # for nonparametric ruptures
             probs_occur = rup.probs_occur
         else:
             probs_occur = numpy.zeros(0, numpy.float64)
-        self.data['srcidx'].append(src_id or 0)
         self.data['occurrence_rate'].append(rate)
         self.data['weight'].append(rup.weight or numpy.nan)
         self.data['probs_occur'].append(probs_occur)
@@ -335,29 +334,28 @@ class ContextMaker(object):
                 src, sites = next(src_sites)
                 if one_site and len(src.src_group_ids) == 1:
                     multisource.append(src)
-                    poemap = None
+                    acc = dict(numrups=0, totrups=0)
                 else:
-                    poemap = pmaker.make(src, sites, pmap, rup_data)
+                    acc = pmaker.make(src, sites, pmap, rup_data)
             except StopIteration:
                 break
             except Exception as err:
                 etype, err, tb = sys.exc_info()
                 msg = '%s (source id=%s)' % (str(err), src.source_id)
                 raise etype(msg).with_traceback(tb)
-            if poemap:
-                if poemap.maxdist:
-                    dists.append(poemap.maxdist)
-                totrups += poemap.totrups
+            totrups += acc['totrups']
+            if acc['numrups']:
+                dists.extend(dst for dst in acc['mdist'] if dst is not None)
                 calc_times[src.id] += numpy.array(
-                    [poemap.numrups, poemap.nsites, time.time() - t0])
+                    [acc['numrups'], acc['nsites'], time.time() - t0])
 
         if multisource:
             # this is only define for 1 site, no src_mutex and single grp_id
-            poemap = pmaker.make1(multisource, pmap, rup_data)
-            totrups += poemap.totrups
+            acc = pmaker.make1(multisource, pmap, rup_data)
+            totrups += acc['totrups']
             [grp_id] = multisource[0].src_group_ids
             calc_times[grp_id] += numpy.array(
-                [poemap.numrups, poemap.nsites, time.time() - t0])
+                [acc['numrups'], acc['nsites'], time.time() - t0])
 
         rdata = {k: numpy.array(v) for k, v in rup_data.items()}
         rdata['grp_id'] = numpy.uint16(rup_data['grp_id'])
@@ -440,44 +438,18 @@ class PmapMaker(object):
                     src.iter_ruptures(shift_hypo=self.shift_hypo),
                     key=operator.attrgetter('mag'))]
         rupdata = RupData(self.cmaker)
-        totrups, numrups, nsites = 0, 0, 0
         L, G = len(self.imtls.array), len(self.gsims)
         poemap = ProbabilityMap(L, G)
-        dists = []
+        acc = AccumDict(totrups=0, numrups=0, nsites=0, dists=[])
         for rups, sites, mdist in self._gen_rups_sites(src, sites):
-            if mdist is not None:
-                dists.append(mdist)
-            with self.ctx_mon:
-                ctxs = self.cmaker.make_ctxs(rups, sites, mdist)
-                if ctxs:
-                    totrups += len(ctxs)
-                    ctxs = self.collapse(ctxs)
-                    numrups += len(ctxs)
-            for rup, r_sites, dctx in ctxs:
-                if self.fewsites:  # store rupdata
-                    rupdata.add(rup, src.id, r_sites, dctx)
-                sids, poes = self._sids_poes(rup, r_sites, dctx)
-                with self.pne_mon:
-                    pnes = rup.get_probability_no_exceedance(poes)
-                    if self.rup_indep:
-                        for sid, pne in zip(sids, pnes):
-                            poemap.setdefault(sid, self.rup_indep).array *= pne
-                    else:
-                        for sid, pne in zip(sids, pnes):
-                            poemap.setdefault(sid, self.rup_indep).array += (
-                                1.-pne) * rup.weight
-                nsites += len(sids)
-        poemap.totrups = totrups
-        poemap.numrups = numrups
-        poemap.nsites = nsites
-        poemap.maxdist = numpy.mean(dists) if dists else None
+            acc += self._update_poemap(poemap, rups, mdist, rupdata)
         self._update(pmap, poemap, src)
         if len(rupdata.data):
             for gid in src.src_group_ids:
-                rup_data['grp_id'].extend([gid] * numrups)
+                rup_data['grp_id'].extend([gid] * acc['numrups'])
                 for k, v in rupdata.data.items():
                     rup_data[k].extend(v)
-        return poemap
+        return acc
 
     def make1(self, multisource, pmap, rup_data):
         """
@@ -493,43 +465,46 @@ class PmapMaker(object):
             mag_rups = [(mag, list(rups)) for mag, rups in itertools.groupby(
                 ruptures, key=operator.attrgetter('mag'))]
         rupdata = RupData(self.cmaker)
-        totrups, numrups, nsites = 0, 0, 0
         L, G = len(self.imtls.array), len(self.gsims)
         poemap = ProbabilityMap(L, G)
-        dists = []
         [grp_id] = multisource[0].src_group_ids
+        acc = AccumDict(totrups=0, numrups=0, nsites=0, dists=[])
         for mag, rups in mag_rups:
             mdist = self.maximum_distance(self.cmaker.trt, mag)
-            dists.append(mdist)
-            with self.ctx_mon:
-                ctxs = self.cmaker.make_ctxs(rups, sitecol, mdist)
-                if ctxs:
-                    totrups += len(ctxs)
-                    ctxs = self.collapse(ctxs)
-                    numrups += len(ctxs)
-            for rup, sites, dctx in ctxs:
-                rupdata.add(rup, grp_id, sites, dctx)
-                sids, poes = self._sids_poes(rup, sites, dctx)
-                with self.pne_mon:
-                    pnes = rup.get_probability_no_exceedance(poes)
-                    if self.rup_indep:
-                        for sid, pne in zip(sids, pnes):
-                            poemap.setdefault(sid, self.rup_indep).array *= pne
-                    else:
-                        for sid, pne in zip(sids, pnes):
-                            poemap.setdefault(sid, self.rup_indep).array += (
-                                1.-pne) * rup.weight
-                nsites += len(sids)
-        poemap.totrups = totrups
-        poemap.numrups = numrups
-        poemap.nsites = nsites
-        poemap.maxdist = numpy.mean(dists) if dists else None
-        poemap.data = rupdata.data
+            acc += self._update_poemap(poemap, rups, mdist, rupdata)
         pmap[grp_id] |= ~poemap if self.rup_indep else poemap
-        rup_data['grp_id'].extend([grp_id] * numrups)
+        rup_data['grp_id'].extend([grp_id] * acc['numrups'])
         for k, v in rupdata.data.items():
             rup_data[k].extend(v)
-        return poemap
+        return acc
+
+    def _update_poemap(self, poemap, rups, mdist, rupdata):
+        sitecol = self.srcfilter.sitecol
+        totrups = 0
+        numrups = 0
+        nsites = 0
+        with self.ctx_mon:
+            ctxs = self.cmaker.make_ctxs(rups, sitecol, mdist)
+            if ctxs:
+                totrups += len(ctxs)
+                ctxs = self.collapse(ctxs)
+                numrups += len(ctxs)
+        for rup, sites, dctx in ctxs:
+            if self.fewsites:  # store rupdata
+                rupdata.add(rup, sites, dctx)
+            sids, poes = self._sids_poes(rup, sites, dctx)
+            with self.pne_mon:
+                pnes = rup.get_probability_no_exceedance(poes)
+                if self.rup_indep:
+                    for sid, pne in zip(sids, pnes):
+                        poemap.setdefault(sid, self.rup_indep).array *= pne
+                else:
+                    for sid, pne in zip(sids, pnes):
+                        poemap.setdefault(sid, self.rup_indep).array += (
+                            1.-pne) * rup.weight
+            nsites += len(sids)
+        return dict(mdist=[mdist], totrups=totrups, numrups=numrups,
+                    nsites=nsites)
 
     def collapse(self, ctxs, precision=1E-3):
         """
