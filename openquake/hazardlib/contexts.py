@@ -490,16 +490,15 @@ class PmapMaker(object):
             for src in multisource:
                 ruptures.extend(src.iter_ruptures(shift_hypo=self.shift_hypo))
             ruptures.sort(key=operator.attrgetter('mag'))
-            self.mag_rups = [(mag, list(rups))
-                             for mag, rups in itertools.groupby(
-                                     ruptures, key=operator.attrgetter('mag'))]
+            mag_rups = [(mag, list(rups)) for mag, rups in itertools.groupby(
+                ruptures, key=operator.attrgetter('mag'))]
         rupdata = RupData(self.cmaker)
         totrups, numrups, nsites = 0, 0, 0
         L, G = len(self.imtls.array), len(self.gsims)
         poemap = ProbabilityMap(L, G)
         dists = []
-        self.grp_id = self.group[0].src_group_ids[0]
-        for mag, rups in self.mag_rups:
+        [grp_id] = multisource[0].src_group_ids
+        for mag, rups in mag_rups:
             mdist = self.maximum_distance(self.cmaker.trt, mag)
             dists.append(mdist)
             with self.ctx_mon:
@@ -509,7 +508,7 @@ class PmapMaker(object):
                     ctxs = self.collapse(ctxs)
                     numrups += len(ctxs)
             for rup, sites, dctx in ctxs:
-                rupdata.add(rup, self.grp_id, sites, dctx)
+                rupdata.add(rup, grp_id, sites, dctx)
                 sids, poes = self._sids_poes(rup, sites, dctx)
                 with self.pne_mon:
                     pnes = rup.get_probability_no_exceedance(poes)
@@ -526,7 +525,7 @@ class PmapMaker(object):
         poemap.nsites = nsites
         poemap.maxdist = numpy.mean(dists) if dists else None
         poemap.data = rupdata.data
-        pmap[self.grp_id] |= ~poemap if self.rup_indep else poemap
+        pmap[grp_id] |= ~poemap if self.rup_indep else poemap
         return poemap
 
     def collapse(self, ctxs, precision=1E-3):
