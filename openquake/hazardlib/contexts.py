@@ -326,7 +326,7 @@ class ContextMaker(object):
         calc_times = AccumDict(accum=numpy.zeros(3, numpy.float32))
         pmaker = PmapMaker(self, srcfilter, group)
         if len(srcfilter.sitecol) == 1 and not pmaker.src_mutex:
-            return self.get_pmap_by_grp_one_site(pmaker, pmap)
+            return self._pmap_by_grp_one_site(pmaker, pmap)
         dists = []
         totrups = 0
         src_sites = srcfilter(group)
@@ -359,10 +359,7 @@ class ContextMaker(object):
                      maxdist=numpy.mean(dists) if dists else None)
         return pmap, rdata, calc_times, extra
 
-    def get_pmap_by_grp_one_site(self, pmaker, pmap):
-        """
-        :return: dictionaries pmap, rdata, calc_times
-        """
+    def _pmap_by_grp_one_site(self, pmaker, pmap):
         gids = []
         rup_data = AccumDict(accum=[])
         # AccumDict of arrays with 3 elements nrups, nsites, calc_time
