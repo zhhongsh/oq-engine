@@ -505,9 +505,10 @@ class PmapMaker(object):
         distmax = max(dctx.rrup.max() for rup, sctx, dctx in ctxs)
         for rup, sctx, dctx in ctxs:
             pdist = self.pointsource_distance.get('%.3f' % rup.mag)
+            overpdist = pdist and dctx.rrup.min() > pdist
             tup = []
             for p in self.REQUIRES_RUPTURE_PARAMETERS:
-                if p != 'mag' and pdist and dctx.rrup.min() > pdist:
+                if p != 'mag' and overpdist:
                     tup.append(0)
                     # all nonmag rupture parameters are collapsed to 0
                     # over the pointsource_distance
