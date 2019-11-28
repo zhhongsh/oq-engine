@@ -352,7 +352,7 @@ class ContextMaker(object):
             acc = pmaker.make1(multisource, pmap, rup_data)
             totrups += acc['totrups']
             [grp_id] = multisource[0].src_group_ids
-            calc_times[grp_id] += numpy.array(
+            calc_times[str(grp_id)] += numpy.array(
                 [acc['numrups'], acc['nsites'], time.time() - t0])
 
         rdata = {k: numpy.array(v) for k, v in rup_data.items()}

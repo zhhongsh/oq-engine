@@ -772,6 +772,9 @@ class HazardCalculator(BaseCalculator):
         """
         Save (weight, num_sites, calc_time) inside the source_info dataset
         """
+        for key in list(calc_times):
+            if isinstance(key, str):  # grp_id
+                del calc_times[key]
         if calc_times:
             source_info = self.datastore['source_info']
             arr = numpy.zeros((len(source_info), 3), F32)
