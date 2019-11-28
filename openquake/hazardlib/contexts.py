@@ -467,6 +467,7 @@ class PmapMaker(object):
                 ctxs = self.collapse(ctxs)
                 numrups += len(ctxs)
         for rup, sites, dctx in ctxs:
+            # this is the inner loop dominating the performance
             if self.fewsites:  # store rupdata
                 rupdata.add(rup, sites, dctx)
             with self.gmf_mon:
@@ -493,14 +494,14 @@ class PmapMaker(object):
             nsites += len(sites)
         return dict(totrups=totrups, numrups=numrups, nsites=nsites)
 
-    def collapse(self, ctxs, precision=1E-3):
+    def collapse(self, ctxs, precision=1E-2):
         """
-        Collapse the contexts if the distances are equivalent up to 1/1000
+        Collapse the contexts if the distances are equivalent up to 1%
         """
         # effect = self.cmaker.effect  # not None for single-site calculations
         if not self.rup_indep or len(ctxs) == 1:  # do not collapse
             return ctxs
-        acc = AccumDict(accum=[])
+        acc = AccumDict(accum=[])  # rup_params + rup_dists -> contexts
         distmax = max(dctx.rrup.max() for rup, sctx, dctx in ctxs)
         for rup, sctx, dctx in ctxs:
             pdist = self.pointsource_distance.get('%.3f' % rup.mag)
