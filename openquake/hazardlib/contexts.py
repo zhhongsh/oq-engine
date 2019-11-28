@@ -393,23 +393,6 @@ class PmapMaker(object):
         self.pne_mon = cmaker.mon('composing pnes', measuremem=False)
         self.gmf_mon = cmaker.mon('computing mean_std', measuremem=False)
 
-    def _sids_poes(self, rup, r_sites, dctx):
-        # return sids and poes of shape (N, L, G)
-        # NB: this must be fast since it is inside an inner loop
-        with self.gmf_mon:
-            mean_std = base.get_mean_std(  # shape (2, N, M, G)
-                r_sites, rup, dctx, self.imts, self.gsims)
-        with self.poe_mon:
-            ll = self.loglevels
-            poes = base.get_poes(mean_std, ll, self.trunclevel, self.gsims)
-            for g, gsim in enumerate(self.gsims):
-                for m, imt in enumerate(ll):
-                    if hasattr(gsim, 'weight') and gsim.weight[imt] == 0:
-                        # set by the engine when parsing the gsim logictree;
-                        # when 0 ignore the gsim: see _build_trts_branches
-                        poes[:, ll(imt), g] = 0
-            return r_sites.sids, poes
-
     def _update(self, pmap, pm, src):
         if self.rup_indep:
             pm = ~pm
@@ -437,7 +420,7 @@ class PmapMaker(object):
         rupdata = RupData(self.cmaker)
         L, G = len(self.imtls.array), len(self.gsims)
         poemap = ProbabilityMap(L, G)
-        acc = AccumDict(totrups=0, numrups=0, nsites=0, dists=[])
+        acc = AccumDict(totrups=0, numrups=0, nsites=0)
         for rups, sites, mdist in self._gen_rups_sites(src, sites):
             acc += self._update_poemap(poemap, rups, sites, mdist, rupdata)
         self._update(pmap, poemap, src)
@@ -465,7 +448,7 @@ class PmapMaker(object):
         L, G = len(self.imtls.array), len(self.gsims)
         poemap = ProbabilityMap(L, G)
         [grp_id] = multisource[0].src_group_ids
-        acc = AccumDict(totrups=0, numrups=0, nsites=0, dists=[])
+        acc = AccumDict(totrups=0, numrups=0, nsites=0)
         for mag, rups in mag_rups:
             mdist = self.maximum_distance(self.cmaker.trt, mag)
             acc += self._update_poemap(poemap, rups, sitecol, mdist, rupdata)
@@ -476,9 +459,7 @@ class PmapMaker(object):
         return acc
 
     def _update_poemap(self, poemap, rups, r_sites, mdist, rupdata):
-        totrups = 0
-        numrups = 0
-        nsites = 0
+        totrups, numrups, nsites = 0, 0, 0
         with self.ctx_mon:
             ctxs = self.cmaker.make_ctxs(rups, r_sites, mdist)
             if ctxs:
@@ -488,17 +469,28 @@ class PmapMaker(object):
         for rup, sites, dctx in ctxs:
             if self.fewsites:  # store rupdata
                 rupdata.add(rup, sites, dctx)
-            sids, poes = self._sids_poes(rup, sites, dctx)
+            with self.gmf_mon:
+                mean_std = base.get_mean_std(  # shape (2, N, M, G)
+                    sites, rup, dctx, self.imts, self.gsims)
+            with self.poe_mon:
+                ll = self.loglevels
+                poes = base.get_poes(mean_std, ll, self.trunclevel, self.gsims)
+                for g, gsim in enumerate(self.gsims):
+                    for m, imt in enumerate(ll):
+                        if hasattr(gsim, 'weight') and gsim.weight[imt] == 0:
+                            # set by the engine when parsing the gsim logictree
+                            # when 0 ignore the gsim: see _build_trts_branches
+                            poes[:, ll(imt), g] = 0
             with self.pne_mon:
                 pnes = rup.get_probability_no_exceedance(poes)
                 if self.rup_indep:
-                    for sid, pne in zip(sids, pnes):
+                    for sid, pne in zip(sites.sids, pnes):
                         poemap.setdefault(sid, self.rup_indep).array *= pne
                 else:
-                    for sid, pne in zip(sids, pnes):
+                    for sid, pne in zip(sites.sids, pnes):
                         poemap.setdefault(sid, self.rup_indep).array += (
                             1.-pne) * rup.weight
-            nsites += len(sids)
+            nsites += len(sites)
         return dict(totrups=totrups, numrups=numrups, nsites=nsites)
 
     def collapse(self, ctxs, precision=1E-3):

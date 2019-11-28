@@ -317,6 +317,7 @@ class ClassicalCalculator(base.HazardCalculator):
             acc = smap.get_results().reduce(self.agg_dicts, acc0)
             self.store_rlz_info(acc.eff_ruptures)
         finally:
+            numrups = sum(arr[0] for arr in self.calc_times.values())
             with self.monitor('store source_info'):
                 self.store_source_info(self.calc_times)
             if self.by_task:
@@ -335,7 +336,6 @@ class ClassicalCalculator(base.HazardCalculator):
                     es[task_no] = effsites
                     si[task_no] = srcids
                 self.by_task.clear()
-        numrups = sum(arr[0] for arr in self.calc_times.values())
         if self.totrups != numrups:
             logging.info('Considered %d/%d ruptures', numrups, self.totrups)
         self.calc_times.clear()  # save a bit of memory
