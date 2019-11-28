@@ -345,7 +345,6 @@ class ContextMaker(object):
                 raise etype(msg).with_traceback(tb)
             totrups += acc['totrups']
             if acc['numrups']:
-                dists.extend(dst for dst in acc['mdist'] if dst is not None)
                 calc_times[src.id] += numpy.array(
                     [acc['numrups'], acc['nsites'], time.time() - t0])
 
@@ -442,7 +441,7 @@ class PmapMaker(object):
         poemap = ProbabilityMap(L, G)
         acc = AccumDict(totrups=0, numrups=0, nsites=0, dists=[])
         for rups, sites, mdist in self._gen_rups_sites(src, sites):
-            acc += self._update_poemap(poemap, rups, mdist, rupdata)
+            acc += self._update_poemap(poemap, rups, sites, mdist, rupdata)
         self._update(pmap, poemap, src)
         if len(rupdata.data):
             for gid in src.src_group_ids:
@@ -471,20 +470,19 @@ class PmapMaker(object):
         acc = AccumDict(totrups=0, numrups=0, nsites=0, dists=[])
         for mag, rups in mag_rups:
             mdist = self.maximum_distance(self.cmaker.trt, mag)
-            acc += self._update_poemap(poemap, rups, mdist, rupdata)
+            acc += self._update_poemap(poemap, rups, sitecol, mdist, rupdata)
         pmap[grp_id] |= ~poemap if self.rup_indep else poemap
         rup_data['grp_id'].extend([grp_id] * acc['numrups'])
         for k, v in rupdata.data.items():
             rup_data[k].extend(v)
         return acc
 
-    def _update_poemap(self, poemap, rups, mdist, rupdata):
-        sitecol = self.srcfilter.sitecol
+    def _update_poemap(self, poemap, rups, r_sites, mdist, rupdata):
         totrups = 0
         numrups = 0
         nsites = 0
         with self.ctx_mon:
-            ctxs = self.cmaker.make_ctxs(rups, sitecol, mdist)
+            ctxs = self.cmaker.make_ctxs(rups, r_sites, mdist)
             if ctxs:
                 totrups += len(ctxs)
                 ctxs = self.collapse(ctxs)
@@ -503,8 +501,7 @@ class PmapMaker(object):
                         poemap.setdefault(sid, self.rup_indep).array += (
                             1.-pne) * rup.weight
             nsites += len(sids)
-        return dict(mdist=[mdist], totrups=totrups, numrups=numrups,
-                    nsites=nsites)
+        return dict(totrups=totrups, numrups=numrups, nsites=nsites)
 
     def collapse(self, ctxs, precision=1E-3):
         """
