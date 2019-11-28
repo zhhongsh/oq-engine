@@ -222,8 +222,8 @@ class MultiPointTestCase(unittest.TestCase):
         imtls = DictArray({'PGA': [0.01, 0.02, 0.04, 0.08, 0.16]})
         gsim_by_trt = {'Stable Continental Crust': Campbell2003()}
         hcurves = calc_hazard_curves(groups, sitecol, imtls, gsim_by_trt)
-        expected = [9.999978e-01, 9.083794e-01, 1.489514e-01, 3.690059e-03,
-                    2.762351e-05]
+        expected = [9.999978e-01, 9.083895e-01, 1.489619e-01, 3.690476e-03,
+                    2.762781e-05]
         npt.assert_allclose(hcurves['PGA'][0], expected, rtol=1E-6, atol=1E-6)
 
         # splitting in point sources

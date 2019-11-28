@@ -494,9 +494,9 @@ class PmapMaker(object):
             nsites += len(sites)
         return dict(totrups=totrups, numrups=numrups, nsites=nsites)
 
-    def collapse(self, ctxs, precision=1E-2):
+    def collapse(self, ctxs, precision=1E-3):
         """
-        Collapse the contexts if the distances are equivalent up to 1%
+        Collapse the contexts if the distances are equivalent up to 1E-3
         """
         # effect = self.cmaker.effect  # not None for single-site calculations
         if not self.rup_indep or len(ctxs) == 1:  # do not collapse
@@ -506,6 +506,7 @@ class PmapMaker(object):
         for rup, sctx, dctx in ctxs:
             pdist = self.pointsource_distance.get('%.3f' % rup.mag)
             overpdist = pdist and dctx.rrup.min() > pdist
+            prec = .1 if overpdist else precision  # reduce the precision
             tup = []
             for p in self.REQUIRES_RUPTURE_PARAMETERS:
                 if p != 'mag' and overpdist:
@@ -516,7 +517,7 @@ class PmapMaker(object):
                     tup.append(getattr(rup, p))
             for name in self.REQUIRES_DISTANCES:
                 dists = getattr(dctx, name)
-                tup.extend(I16(dists / distmax / precision))
+                tup.extend(I16(dists / distmax / prec))
                 # NB: the rx distance can be negative, hence the I16 (not U16)
             acc[tuple(tup)].append((rup, sctx, dctx))
         new_ctxs = []
