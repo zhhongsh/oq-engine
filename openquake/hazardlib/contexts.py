@@ -103,7 +103,7 @@ class RupData(object):
         for src in srcs:
             for rup in src.iter_ruptures(shift_hypo=self.cmaker.shift_hypo):
                 self.cmaker.add_rup_params(rup)
-                self.add(rup, src.id, sites)
+                self.add(rup, sites)
         return {k: numpy.array(v) for k, v in self.data.items()}
 
     def add(self, rup, sctx, dctx=None):
@@ -324,7 +324,6 @@ class ContextMaker(object):
         calc_times = AccumDict(accum=numpy.zeros(3, numpy.float32))
         pmaker = PmapMaker(self, srcfilter, group)
         one_site = len(srcfilter.sitecol) == 1 and not pmaker.src_mutex
-        dists = []
         totrups = 0
         src_sites = srcfilter(group)
         multisource = []
@@ -358,8 +357,7 @@ class ContextMaker(object):
 
         rdata = {k: numpy.array(v) for k, v in rup_data.items()}
         rdata['grp_id'] = numpy.uint16(rup_data['grp_id'])
-        extra = dict(totrups=totrups,
-                     maxdist=numpy.mean(dists) if dists else None)
+        extra = dict(totrups=totrups)
         return pmap, rdata, calc_times, extra
 
 
