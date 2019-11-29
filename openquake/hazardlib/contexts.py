@@ -450,7 +450,7 @@ class PmapMaker(object):
         [grp_id] = multisource[0].src_group_ids
         acc = AccumDict(totrups=0, numrups=0, nsites=0)
         for mag, rups in mag_rups:
-            mdist = self.maximum_distance(self.cmaker.trt, mag)
+            mdist = self.maximum_distance(self.cmaker.trt)  # TODO: agg mag
             acc += self._update_poemap(poemap, rups, sitecol, mdist, rupdata)
         pmap[grp_id] |= ~poemap if self.rup_indep else poemap
         rup_data['grp_id'].extend([grp_id] * acc['numrups'])
