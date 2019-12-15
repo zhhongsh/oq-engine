@@ -18,6 +18,7 @@
 import logging
 import operator
 import numpy
+from scipy.sparse import csr_matrix
 
 from openquake.baselib import datastore, hdf5, parallel, general
 from openquake.baselib.python3compat import zip
@@ -43,26 +44,26 @@ gmf_info_dt = numpy.dtype([('rup_id', U32), ('task_no', U16),
 
 
 def calc_risk(hazard, assetcol, param, monitor):
-    gmfs = numpy.concatenate(hazard['gmfs'])
-    events = numpy.concatenate(hazard['events'])
     mon_risk = monitor('computing risk', measuremem=False)
     mon_agg = monitor('aggregating losses', measuremem=False)
-    dstore = datastore.read(param['hdf5path'])
+
+    gmfs = numpy.concatenate(hazard['gmfs'])
+    eids = numpy.unique(gmfs['eid'])
+    E = param['E']
+    L = len(param['lba'].loss_names)
+    arr = csr_matrix((E, L), dtype=F32)
     assets_by_site = assetcol.assets_by_site()
     with monitor('getting crmodel'):
+        dstore = datastore.read(param['hdf5path'])
+        events = dstore['events'][list(eids)]
+        eid2rlz = dict(zip(eids, events['rlz_id']))
         crmodel = riskmodels.CompositeRiskModel.read(dstore)
         weights = dstore['weights'][()]
-    E = len(events)
-    L = len(param['lba'].loss_names)
     elt_dt = [('event_id', U32), ('rlzi', U16), ('loss', (F32, (L,)))]
     alt = general.AccumDict(accum=numpy.zeros(L, F32))  # aid, eid -> loss
-    acc = dict(elt=numpy.zeros((E, L), F32),
-               gmf_info=[], events_per_sid=0, lossbytes=0)
-    arr = acc['elt']
+    acc = dict(elt=arr, gmf_info=[], events_per_sid=0, lossbytes=0)
     lba = param['lba']
     tempname = param['tempname']
-    eid2rlz = dict(events[['id', 'rlz_id']])
-    eid2idx = {eid: idx for idx, eid in enumerate(eid2rlz)}
     factor = param['asset_loss_table']
     minimum_loss = param['minimum_loss']
     for sid, haz in general.group_array(gmfs, 'sid').items():
@@ -73,7 +74,6 @@ def calc_risk(hazard, assetcol, param, monitor):
         if param['avg_losses']:
             ws = weights[[eid2rlz[eid] for eid in haz['eid']]]
         assets_by_taxo = get_assets_by_taxo(assets_on_sid, tempname)
-        eidx = [eid2idx[eid] for eid in haz['eid']]
         with mon_risk:
             out = get_output(crmodel, assets_by_taxo, haz)
         with mon_agg:
@@ -91,7 +91,8 @@ def calc_risk(hazard, assetcol, param, monitor):
                     for loss, eid in highest_losses(losses, out.eids, factor):
                         if loss > minimum_loss[lti]:
                             alt[aid, eid][loss_idx] = loss
-                    arr[eidx, loss_idx] += losses
+                    for loss, eid in zip(losses, out.eids):
+                        arr[eid, loss_idx] += loss
                     if param['avg_losses']:
                         lba.losses_by_A[aid, loss_idx] += (
                             losses @ ws * param['ses_ratio'])
@@ -100,8 +101,8 @@ def calc_risk(hazard, assetcol, param, monitor):
         acc['events_per_sid'] /= len(gmfs)
     acc['gmf_info'] = numpy.array(hazard['gmf_info'], gmf_info_dt)
     acc['elt'] = numpy.fromiter(  # this is ultra-fast
-        ((event['id'], event['rlz_id'], losses)
-         for event, losses in zip(events, arr) if losses.sum()), elt_dt)
+        ((eid, rlz_id, arr[eid].todense())
+         for eid, _, rlz_id in events), elt_dt)
     acc['alt'] = alt = numpy.fromiter(  # already sorted by aid
         ((aid, eid, eid2rlz[eid], loss) for (aid, eid), loss in alt.items()),
         param['ael_dt'])
@@ -124,7 +125,7 @@ def ebrisk(rupgetter, srcfilter, param, monitor):
     """
     mon_haz = monitor('getting hazard', measuremem=False)
     mon_rup = monitor('getting ruptures', measuremem=False)
-    hazard = dict(gmfs=[], events=[], gmf_info=[])
+    hazard = dict(gmfs=[], gmf_info=[])
     with mon_rup:
         gg = getters.GmfGetter(rupgetter, srcfilter, param['oqparam'])
         gg.init()  # read the ruptures and filter them
@@ -132,7 +133,6 @@ def ebrisk(rupgetter, srcfilter, param, monitor):
         with mon_haz:
             data = c.compute_all(gg.min_iml, gg.rlzs_by_gsim)
             hazard['gmfs'].append(data)
-            hazard['events'].append(c.rupture.get_events(gg.rlzs_by_gsim))
         hazard['gmf_info'].append(
             (c.rupture.id, mon_haz.task_no, len(c.sids),
              data.nbytes, mon_haz.dt))
@@ -165,6 +165,7 @@ class EbriskCalculator(event_based.EventBasedCalculator):
         self.param['asset_loss_table'] = oq.asset_loss_table
         self.param['minimum_loss'] = [getdefault(oq.minimum_asset_loss, ln)
                                       for ln in oq.loss_names]
+        self.param['E'] = self.E
         self.param['ael_dt'] = ael_dt(oq.loss_names, rlz=True)
         self.A = A = len(self.assetcol)
         self.datastore.create_dset(
