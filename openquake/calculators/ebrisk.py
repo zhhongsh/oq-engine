@@ -18,7 +18,7 @@
 import logging
 import operator
 import numpy
-from scipy.sparse import csr_matrix
+from scipy.sparse import dok_matrix
 
 from openquake.baselib import datastore, hdf5, parallel, general
 from openquake.baselib.python3compat import zip
@@ -47,11 +47,11 @@ def calc_risk(hazard, assetcol, param, monitor):
     mon_risk = monitor('computing risk', measuremem=False)
     mon_agg = monitor('aggregating losses', measuremem=False)
 
-    gmfs = numpy.concatenate(hazard['gmfs'])
+    gmfs = numpy.concatenate(hazard)
     eids = numpy.unique(gmfs['eid'])
     E = param['E']
     L = len(param['lba'].loss_names)
-    arr = csr_matrix((E, L), dtype=F32)
+    arr = dok_matrix((E, L), dtype=F32)
     assets_by_site = assetcol.assets_by_site()
     with monitor('getting crmodel'):
         dstore = datastore.read(param['hdf5path'])
@@ -61,7 +61,7 @@ def calc_risk(hazard, assetcol, param, monitor):
         weights = dstore['weights'][()]
     elt_dt = [('event_id', U32), ('rlzi', U16), ('loss', (F32, (L,)))]
     alt = general.AccumDict(accum=numpy.zeros(L, F32))  # aid, eid -> loss
-    acc = dict(elt=arr, gmf_info=[], events_per_sid=0, lossbytes=0)
+    acc = dict(elt=arr, events_per_sid=0, lossbytes=0)
     lba = param['lba']
     tempname = param['tempname']
     factor = param['asset_loss_table']
@@ -97,9 +97,7 @@ def calc_risk(hazard, assetcol, param, monitor):
                         lba.losses_by_A[aid, loss_idx] += (
                             losses @ ws * param['ses_ratio'])
                     acc['lossbytes'] += losses.nbytes
-    if len(gmfs):
-        acc['events_per_sid'] /= len(gmfs)
-    acc['gmf_info'] = numpy.array(hazard['gmf_info'], gmf_info_dt)
+    acc['events_per_sid'] /= len(gmfs)
     acc['elt'] = numpy.fromiter(  # this is ultra-fast
         ((eid, rlz_id, arr[eid].todense())
          for eid, _, rlz_id in events), elt_dt)
@@ -125,22 +123,24 @@ def ebrisk(rupgetter, srcfilter, param, monitor):
     """
     mon_haz = monitor('getting hazard', measuremem=False)
     mon_rup = monitor('getting ruptures', measuremem=False)
-    hazard = dict(gmfs=[], gmf_info=[])
+    gmfs = []
+    gmf_info = []
     with mon_rup:
         gg = getters.GmfGetter(rupgetter, srcfilter, param['oqparam'])
         gg.init()  # read the ruptures and filter them
     for c in gg.computers:
         with mon_haz:
             data = c.compute_all(gg.min_iml, gg.rlzs_by_gsim)
-            hazard['gmfs'].append(data)
-        hazard['gmf_info'].append(
-            (c.rupture.id, mon_haz.task_no, len(c.sids),
-             data.nbytes, mon_haz.dt))
-    if not hazard['gmfs']:
+        if len(data):
+            gmfs.append(data)
+        gmf_info.append((c.rupture.id, mon_haz.task_no, len(c.sids),
+                         data.nbytes, mon_haz.dt))
+    if not gmfs:
         return {}
+    yield dict(gmf_info=numpy.array(gmf_info, gmf_info_dt))
     with monitor('getting assets'):
         assetcol = datastore.read(param['hdf5path'])['assetcol']
-    return calc_risk(hazard, assetcol, param, monitor)
+    yield calc_risk(gmfs, assetcol, param, monitor)
 
 
 @base.calculators.add('ebrisk')
@@ -221,11 +221,13 @@ class EbriskCalculator(event_based.EventBasedCalculator):
         :param dummy: unused parameter
         :param dic: dictionary with keys elt, losses_by_A
         """
-        if not dic or len(dic['elt']) == 0:
+        if not dic:
+            return
+        elif 'gmf_info' in dic:
+            hdf5.extend(self.datastore['gmf_info'], dic['gmf_info'])
             return
         self.oqparam.ground_motion_fields = False  # hack
         elt = dic['elt']
-        hdf5.extend(self.datastore['gmf_info'], dic['gmf_info'])
         with self.monitor('saving losses_by_event and asset_loss_table'):
             hdf5.extend(self.datastore['losses_by_event'], elt)
             hdf5.extend(self.datastore['asset_loss_table/data'],
