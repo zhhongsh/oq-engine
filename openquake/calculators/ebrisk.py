@@ -56,11 +56,10 @@ def calc_risk(gmfs, param, monitor):
         crmodel = riskmodels.CompositeRiskModel.read(dstore)
         events = dstore['events'][list(eids)]
         weights = dstore['weights'][()]
-    E = len(eids)
     L = len(param['lba'].loss_names)
     elt_dt = [('event_id', U32), ('rlzi', U16), ('loss', (F32, (L,)))]
     alt = general.AccumDict(accum=numpy.zeros(L, F32))  # aid, eid -> loss
-    arr = numpy.zeros((E, L), F32)
+    tot = general.AccumDict(accum=numpy.zeros(L, F32))  # eid -> loss
     acc = dict(events_per_sid=0, numlosses=numpy.zeros(2, int))  # (kept, tot)
     lba = param['lba']
     tempname = param['tempname']
@@ -83,7 +82,6 @@ def calc_risk(gmfs, param, monitor):
         if param['avg_losses']:
             ws = weights[[eid2rlz[eid] for eid in haz['eid']]]
         assets_by_taxo = get_assets_by_taxo(assets_on_sid, tempname)
-        eidx = numpy.array([eid2idx[eid] for eid in haz['eid']])
         with mon_risk:
             out = get_output(crmodel, assets_by_taxo, haz)
         for lti, lt in enumerate(crmodel.loss_types):
@@ -98,20 +96,18 @@ def calc_risk(gmfs, param, monitor):
                 for loss_idx, losses in lba.compute(asset, ls, lt):
                     kept = 0
                     with mon_agg:
-                        if param['aggregate_by']:
-                            for loss, eid in zip(losses, out.eids):
-                                if loss >= minimum_loss[loss_idx]:
-                                    alt[aid, eid][loss_idx] = loss
-                                    kept += 1
-                        arr[eidx, loss_idx] += losses
+                        for loss, eid in zip(losses, out.eids):
+                            if loss >= minimum_loss[loss_idx]:
+                                alt[aid, eid][loss_idx] = loss
+                                kept += 1
+                            tot[eid][loss_idx] += loss
                     if param['avg_losses']:  # this is really fast
                         lba.losses_by_A[aid, loss_idx] += losses @ ws
                     acc['numlosses'] += numpy.array([kept, len(losses)])
     if len(gmfs):
         acc['events_per_sid'] /= len(gmfs)
     acc['elt'] = numpy.fromiter(  # this is ultra-fast
-        ((event['id'], event['rlz_id'], losses)
-         for event, losses in zip(events, arr) if losses.sum()), elt_dt)
+        ((eid, eid2rlz[eid], losses) for eid, losses in tot.items()), elt_dt)
     acc['alt'] = alt = numpy.fromiter(  # already sorted by aid
         ((aid, eid, eid2rlz[eid], loss) for (aid, eid), loss in alt.items()),
         param['ael_dt'])
